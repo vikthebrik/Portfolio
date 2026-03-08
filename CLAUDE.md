@@ -26,7 +26,9 @@ The experience acts as a central Hub with Portals leading to different conceptua
 3. **Terminal Driven**: Run all necessary npm scripts and tasks directly within the integrated terminal.
 4. **Context Updates**: Always update this shared memory `CLAUDE.md` after every major feature or phase implementation.
 
-## Current Phase: Phase 1 (Initial Setup & Camera Rig)
-- Scaffold Vite environment.
-- Install 3D packages (`three`, `three-fiber`, `gsap`, etc.).
-- Scaffold Phase 1 conceptual structure (Camera Rig & State Manager).
+## Current Phase: Phase 2 (Warm Analog Aesthetic & Asset-Based Redirection)
+- **Status: Active**
+- **Previous:** Phase 1 (Initial Setup & Camera Rig) - *Completed*
+- **Goals:**
+  - Define a rich, warm, saturated, and analog aesthetic (think depth of field, film grain, bloom, and highly detailed/colorful textures).
+  - Implement the "Redirection by Asset" concept: Clicking a portal object (e.g. Drone) not only moves the 3D camera but radically switches the 2D layout and HTML UI context overlaid on the scene. Each portal has its own unique page layout and interaction paradigm.
