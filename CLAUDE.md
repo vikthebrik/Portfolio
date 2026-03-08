@@ -24,11 +24,20 @@ The experience acts as a central Hub with Portals leading to different conceptua
 1. **Plan Generation**: A Plan Artifact must be produced for each current phase before coding heavily.
 2. **Browser Mockup Preview**: Use local dev browser mockups to preview 3D scene changes in real-time.
 3. **Terminal Driven**: Run all necessary npm scripts and tasks directly within the integrated terminal.
-4. **Context Updates**: Always update this shared memory `CLAUDE.md` after every major feature or phase implementation.
-
+4. **Context Updates (MANDATORY)**: You MUST autonomously update this shared memory `CLAUDE.md` after *every* major feature, bug fix, or phase implementation. Do not wait for the user to ask you to update it; always proactively track the current state, active phase, and completed goals in this file.
 ## Current Phase: Phase 2 (Warm Analog Aesthetic & Asset-Based Redirection)
-- **Status: Active**
+- **Status: Completed**
 - **Previous:** Phase 1 (Initial Setup & Camera Rig) - *Completed*
-- **Goals:**
-  - Define a rich, warm, saturated, and analog aesthetic (think depth of field, film grain, bloom, and highly detailed/colorful textures).
-  - Implement the "Redirection by Asset" concept: Clicking a portal object (e.g. Drone) not only moves the 3D camera but radically switches the 2D layout and HTML UI context overlaid on the scene. Each portal has its own unique page layout and interaction paradigm.
+- **Implemented:**
+  - `@react-three/postprocessing` + `framer-motion` installed
+  - `<PostFX />`: DepthOfField (tweens on transition), Bloom, Noise (0.05 opacity), Vignette
+  - Warm lighting rig: ambient `#ff9966`, key `#ffd580`, hub point `#ff6600`, rim `#aa44ff`; Environment: `'sunset'`
+  - Portal orbs: `clearcoat:1`, saturated pallete (purple/orange/green/amber), stronger hover glow
+  - `meshPhysicalMaterial` on HubCore (warm orange, clearcoat) and Ground
+  - `src/ui/UIManager.tsx` with `AnimatePresence` — 5 fully distinct HTML overlays:
+    - **HUB**: minimal logo + ghost nav
+    - **PORTAL_DRONE**: FPV HUD (crosshair, telemetry sidebar, battery, rec timer)
+    - **PORTAL_DESIGN**: Bauhaus color-grid + giant display type
+    - **PORTAL_TECH**: macOS-style terminal window (monospace, green-on-dark)
+    - **PORTAL_RESEARCH**: serif document card (Georgia, off-white)
+  - All portal UIs include a back-to-hub control

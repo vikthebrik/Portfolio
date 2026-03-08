@@ -54,12 +54,14 @@ export default function Portal({ name, viewId, position, color }: PortalProps) {
         <icosahedronGeometry args={[0.65, 3]} />
         <MeshDistortMaterial
           color={color}
-          distort={hovered ? 0.45 : 0.2}
-          speed={hovered ? 4 : 1.5}
-          roughness={0.05}
-          metalness={0.9}
+          distort={hovered ? 0.5 : 0.22}
+          speed={hovered ? 5 : 2}
+          roughness={0.1}
+          metalness={0.7}
+          clearcoat={1}
+          clearcoatRoughness={0.05}
           emissive={color}
-          emissiveIntensity={hovered ? 0.6 : 0.15}
+          emissiveIntensity={hovered ? 0.9 : 0.28}
         />
       </mesh>
 
@@ -76,7 +78,6 @@ export default function Portal({ name, viewId, position, color }: PortalProps) {
         color={hovered ? '#ffffff' : '#888888'}
         anchorX="center"
         anchorY="middle"
-        font="/fonts/Inter-Bold.woff"
         letterSpacing={0.12}
       >
         {name.toUpperCase()}
@@ -84,7 +85,7 @@ export default function Portal({ name, viewId, position, color }: PortalProps) {
 
       {/* Glow halo (point light activated on hover) */}
       {hovered && (
-        <pointLight color={color} intensity={3} distance={4} decay={2} />
+        <pointLight color={color} intensity={5} distance={5} decay={2} />
       )}
     </group>
   )
