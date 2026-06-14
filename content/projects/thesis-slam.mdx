@@ -1,0 +1,24 @@
+---
+title: Tightly-Coupled Visual-Inertial SLAM
+slug: thesis-slam
+category: research
+summary: Undergraduate thesis on a factor-graph SLAM backend that fuses camera and IMU data with provable drift bounds.
+tags: [slam, computer-vision, optimization, robotics]
+related: [autonomous-mapping-drone, realtime-cv-pipeline]
+year: 2025
+featured: true
+links:
+  paper: https://example.com/papers/thesis-slam.pdf
+  repo: https://github.com/yourname/thesis-slam
+---
+
+## Overview
+
+A visual-inertial SLAM backend built on a sliding-window factor graph. The
+contribution is a marginalization scheme that keeps the optimization problem
+bounded in size while preserving consistency, giving predictable drift over long
+trajectories in GPS-denied environments.
+
+This work seeds the `research` cluster and links directly to the drone (which
+runs a lighter variant onboard) and to the real-time CV pipeline that feeds it
+features.

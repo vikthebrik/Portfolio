@@ -1,0 +1,22 @@
+---
+title: Real-Time CV Feature Pipeline
+slug: realtime-cv-pipeline
+category: tech
+summary: A zero-copy computer-vision pipeline that extracts and tracks features at camera framerate on embedded hardware.
+tags: [computer-vision, embedded, performance, ros2]
+related: [autonomous-mapping-drone]
+year: 2024
+links:
+  repo: https://github.com/yourname/realtime-cv-pipeline
+  demo: https://example.com/demos/cv-pipeline
+---
+
+## Overview
+
+A feature-extraction and tracking pipeline designed to run inside a tight control
+loop. Frames move through detection, descriptor extraction, and tracking with no
+intermediate copies, sustaining camera framerate on a constrained SoC.
+
+It feeds the SLAM backend and runs on the mapping drone, so it sits between the
+`tech` and `research` clusters — exactly the cross-pillar bridge the graph is
+meant to surface.
