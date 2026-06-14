@@ -30,6 +30,10 @@ const projects = defineCollection({
       year: s.number().int().optional(),
       featured: s.boolean().default(false),
 
+      // Manual overrides on the auto-derived graph (see CLAUDE.md "Manual control").
+      order: s.number().int().optional(), // manual sort within a category
+      pinned: s.boolean().default(false), // force-show (label always visible for now)
+
       // External media (CDN / stream host) — referenced by URL, never bundled.
       cover: s.string().url().optional(),
       poster: s.string().url().optional(),
