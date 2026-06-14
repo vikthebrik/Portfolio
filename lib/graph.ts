@@ -1,5 +1,5 @@
 import { projects } from '#site/content'
-import { CATEGORIES, type Category } from '@/velite.config'
+import { CATEGORIES, type Category } from '@/lib/categories'
 
 /**
  * The ONLY place nodes/edges are built. Keep this pure and deterministic so the
