@@ -22,3 +22,8 @@ next-env.d.ts
 .DS_Store
 *.pem
 npm-debug.log*
+
+# playwright mcp verification artifacts (root-level screenshots only — inline
+# diagram PNGs beside MDX in content/ must stay tracked, see CLAUDE.md media strategy)
+.playwright-mcp/
+/*.png
