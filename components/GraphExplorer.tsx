@@ -47,11 +47,7 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
           break
         case 'category':
           // toggle: clicking the focused category again clears focus
-          setFocusState((prev) => {
-            const next = prev === node.category ? null : node.category!
-            window.history.pushState(null, '', next ? `/?c=${next}` : '/')
-            return next
-          })
+          setFocus(focus === node.category ? null : node.category!)
           break
         case 'about':
           router.push(node.url ?? '/about')
@@ -61,7 +57,7 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
           break
       }
     },
-    [router, setFocus],
+    [router, setFocus, focus],
   )
 
   return (

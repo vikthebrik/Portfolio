@@ -77,13 +77,12 @@ export function ForceGraph({
   const [k, setK] = useState(1) // zoom scale → drives label fade
   const [hovered, setHovered] = useState<string | null>(null)
 
-  const byId = useMemo(() => {
-    const m = new Map<string, SimNode>()
-    for (const n of simNodesRef.current) m.set(n.id, n)
-    return m
-    // rebuilt whenever the sim rebuilds (graph identity changes)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graph])
+  // Live position lookup — rebuilt each render so it always reflects the simulation's
+  // current node objects (cheap at this node count). Not memoized on graph: the sim
+  // populates simNodesRef *after* first render, so a memo would capture an empty map.
+  const byId = new Map<string, SimNode>(
+    simNodesRef.current.map((n) => [n.id, n]),
+  )
 
   const adjacency = useMemo(() => {
     const m = new Map<string, Set<string>>()
