@@ -2,28 +2,39 @@ import { projects } from '#site/content'
 import { CATEGORIES, type Category } from '@/lib/categories'
 
 /**
- * The ONLY place nodes/edges are built. Keep this pure and deterministic so the
- * graph is fully derived from content (see CLAUDE.md). Adding a project file is
- * the only action needed to grow the network.
+ * The ONLY place nodes/edges are built. Keep this pure and deterministic.
+ *
+ * Project nodes are derived 1:1 from MDX frontmatter (see CLAUDE.md). The few
+ * STRUCTURAL nodes — the `root` landing node, the four `category` hubs, and the
+ * `about` ("how it works") node — are defined here in code. Together they form one
+ * connected web: root is the center, with five spokes (4 hubs + about); projects hang
+ * off their hub; related/tag edges cross-link the categories.
  */
 
+export const ROOT_ID = 'root'
+export const ABOUT_ID = 'how-it-works'
+
+export type NodeType = 'root' | 'category' | 'project' | 'about'
+
 export type GraphNode = {
-  id: string // slug for projects, category name for hubs
+  id: string // slug for projects; 'root' / category name / 'how-it-works' otherwise
   label: string
-  type: 'category' | 'project'
-  category: Category
+  type: NodeType
+  category?: Category // undefined for root + about
   url?: string
   featured: boolean
+  pinned: boolean // force-show (manual override)
+  order?: number // manual sort within a category
   degree: number // populated after edges are built; drives node size
 }
 
-export type EdgeKind = 'membership' | 'related' | 'tag'
+export type EdgeKind = 'spoke' | 'membership' | 'related' | 'tag'
 
 export type GraphEdge = {
   source: string
   target: string
   kind: EdgeKind
-  weight: number // membership 1.0, related 0.6, tag 0.2 — tune in the sim
+  weight: number // spoke 1.0, membership 0.9, related 0.6, tag 0.2 — tune in the sim
 }
 
 export type Graph = { nodes: GraphNode[]; edges: GraphEdge[] }
@@ -34,7 +45,18 @@ export function buildGraph(): Graph {
   const nodeMap = new Map<string, GraphNode>()
   const edgeMap = new Map<string, GraphEdge>()
 
-  // 1. Hub nodes, one per category.
+  // 0. Root node — the landing, center of the web.
+  nodeMap.set(ROOT_ID, {
+    id: ROOT_ID,
+    label: 'portfolio',
+    type: 'root',
+    url: '/',
+    featured: false,
+    pinned: true,
+    degree: 0,
+  })
+
+  // 1. Hub nodes, one per category, plus a spoke from root.
   for (const category of CATEGORIES) {
     nodeMap.set(category, {
       id: category,
@@ -42,11 +64,35 @@ export function buildGraph(): Graph {
       type: 'category',
       category,
       featured: false,
+      pinned: false,
       degree: 0,
+    })
+    edgeMap.set(undirectedKey(ROOT_ID, category), {
+      source: ROOT_ID,
+      target: category,
+      kind: 'spoke',
+      weight: 1.0,
     })
   }
 
-  // 2. Project nodes + membership edges to their category hub.
+  // 2. "How it works" structural node — the fifth spoke, routes to /about.
+  nodeMap.set(ABOUT_ID, {
+    id: ABOUT_ID,
+    label: 'how it works',
+    type: 'about',
+    url: '/about',
+    featured: false,
+    pinned: true,
+    degree: 0,
+  })
+  edgeMap.set(undirectedKey(ROOT_ID, ABOUT_ID), {
+    source: ROOT_ID,
+    target: ABOUT_ID,
+    kind: 'spoke',
+    weight: 1.0,
+  })
+
+  // 3. Project nodes + membership edges to their category hub.
   for (const p of projects) {
     nodeMap.set(p.slug, {
       id: p.slug,
@@ -55,20 +101,21 @@ export function buildGraph(): Graph {
       category: p.category,
       url: p.url,
       featured: p.featured,
+      pinned: p.pinned,
+      order: p.order,
       degree: 0,
     })
 
-    const key = undirectedKey(p.slug, p.category)
-    edgeMap.set(key, {
+    edgeMap.set(undirectedKey(p.slug, p.category), {
       source: p.slug,
       target: p.category,
       kind: 'membership',
-      weight: 1.0,
+      weight: 0.9,
     })
   }
 
-  // 3. Explicit related edges (project <-> project). Highest priority: if a tag
-  //    edge would duplicate one of these, the related edge wins.
+  // 4. Explicit related edges (project <-> project). Highest priority among the
+  //    cross-links: a tag edge that would duplicate one of these is skipped.
   for (const p of projects) {
     for (const relatedSlug of p.related) {
       if (!nodeMap.has(relatedSlug)) continue // ignore dangling references
@@ -82,8 +129,7 @@ export function buildGraph(): Graph {
     }
   }
 
-  // 4. Faint shared-tag edges — these create the dense "complex network" on load.
-  //    Skip pairs already linked by a related edge.
+  // 5. Faint shared-tag edges — these weave the web. Skip pairs already linked.
   const byTag = new Map<string, string[]>()
   for (const p of projects) {
     for (const tag of p.tags) {
@@ -96,7 +142,7 @@ export function buildGraph(): Graph {
     for (let i = 0; i < slugs.length; i++) {
       for (let j = i + 1; j < slugs.length; j++) {
         const key = undirectedKey(slugs[i], slugs[j])
-        if (edgeMap.has(key)) continue // don't overwrite membership/related
+        if (edgeMap.has(key)) continue // don't overwrite spoke/membership/related
         edgeMap.set(key, {
           source: slugs[i],
           target: slugs[j],
@@ -107,7 +153,7 @@ export function buildGraph(): Graph {
     }
   }
 
-  // 5. Degree pass — node size in the render reflects connectedness.
+  // 6. Degree pass — node size in the render reflects connectedness.
   const edges = [...edgeMap.values()]
   for (const e of edges) {
     nodeMap.get(e.source)!.degree++
@@ -115,17 +161,4 @@ export function buildGraph(): Graph {
   }
 
   return { nodes: [...nodeMap.values()], edges }
-}
-
-/** Subgraph for the `focused` state: one category hub + its projects + their edges. */
-export function focusCategory(graph: Graph, category: Category): Graph {
-  const keep = new Set(
-    graph.nodes
-      .filter((n) => n.category === category)
-      .map((n) => n.id),
-  )
-  return {
-    nodes: graph.nodes.filter((n) => keep.has(n.id)),
-    edges: graph.edges.filter((e) => keep.has(e.source) && keep.has(e.target)),
-  }
 }
