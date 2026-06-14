@@ -1,0 +1,74 @@
+@import 'tailwindcss';
+
+/**
+ * Design tokens — the single source of truth for the warm-analog / ASCII look.
+ * Components reference these via Tailwind utilities (bg-paper, text-ink, etc.).
+ * Never hardcode a hex value in a component.
+ */
+@theme {
+  /* Warm-analog palette ("Claude Code" feel) */
+  --color-paper: #faf9f5; /* page background */
+  --color-surface: #efeee5; /* cards, sidebar */
+  --color-line: #dad7cd; /* hairline borders, inactive edges */
+  --color-faint: #9b978d; /* tertiary text, tag edges */
+  --color-muted: #6b6862; /* secondary text */
+  --color-ink: #1f1e1a; /* primary text, project nodes */
+  --color-clay: #c15f3c; /* THE accent — active node/edge only, use sparingly */
+  --color-clay-soft: #e6c3b4; /* clay at low opacity for fills/glows */
+
+  /* Type — mono-forward. JetBrains Mono is loaded via next/font in app/layout.tsx
+     and exposed as --font-jetbrains-mono; fall back to system mono before load. */
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, 'SFMono-Regular',
+    'Menlo', monospace;
+  --font-sans: var(--font-mono); /* intentionally mono everywhere */
+
+  /* Scale */
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 2.25rem;
+
+  --radius: 0px; /* sharp corners suit the ASCII grid */
+  --tracking-wide: 0.04em;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  /* Faint dotted grid — atmosphere without noise. */
+  background-image: radial-gradient(var(--color-line) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+/* Quality floor (see CLAUDE.md): visible focus + reduced motion. */
+:focus-visible {
+  outline: 2px solid var(--color-clay);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ASCII sidebar tree helper — box-drawing glyphs as content markers. */
+.tree-branch::before {
+  content: '├── ';
+  color: var(--color-faint);
+}
+.tree-leaf::before {
+  content: '└── ';
+  color: var(--color-faint);
+}
