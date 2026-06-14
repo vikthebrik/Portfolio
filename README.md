@@ -1,73 +1,55 @@
-# React + TypeScript + Vite
+# Portfolio — explorable work graph
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A CS/DSCI portfolio that presents work as a navigable force-directed network.
+Landing view is the full graph of every project; it simplifies to a category,
+then to a single case study, with an ASCII folder-tree sidebar tracking location.
 
-Currently, two official plugins are available:
+> Architecture decisions live in **[CLAUDE.md](./CLAUDE.md)** — read that first.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Stack
 
-## React Compiler
+- **Next.js 16** (App Router, RSC)
+- **Velite** — typed content layer; validates MDX frontmatter, emits typed JSON
+- **Tailwind v4** — tokens in `app/globals.css`
+- **d3-force + SVG** — graph rendering
+- **Vercel** — hosting + preview deploys
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Structure
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
+content/projects/      one .mdx per project — the source of truth
+velite.config.ts       content schema (the graph derives from this)
+lib/graph.ts           pure node/edge derivation + focus subgraph
+app/globals.css        design tokens (warm-analog / ASCII)
+CLAUDE.md              project memory for Claude Code / Antigravity
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Add a project
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Drop a new file in `content/projects/`. Set `category`, `summary`, `tags`, and
+`related`. The graph rebuilds itself — no component or config edits. See
+`autonomous-mapping-drone.mdx` for the shape.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Media (read before uploading anything large)
+
+High-res images and video do **not** go in this repo or `public/`.
+
+- **Images** → CDN / blob store (Vercel Blob, Cloudflare R2, S3). Reference the
+  URL in frontmatter `cover` / `poster`; add the host to `next.config.ts`
+  `images.remotePatterns` and serve via `next/image`.
+- **Video** → a streaming host (Mux, Cloudflare Stream), referenced by playback
+  URL in frontmatter `video`. Don't commit raw MP4s.
+- Only tiny inline diagrams (<200KB) may sit beside the MDX.
+
+## Getting started
+
+```bash
+npm install
+npm run dev        # velite runs in watch mode alongside next dev
 ```
+
+## Build order
+
+Phases are tracked in GitHub Projects. Current foundation covers Phase 0–1:
+schema, derivation, tokens. Next: the graph component and its
+overview → focused → detail state machine.
