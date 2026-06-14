@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { CATEGORIES, type Category } from '@/lib/categories'
-import { focusCategory, type Graph } from '@/lib/graph'
+import type { Graph, GraphNode } from '@/lib/graph'
 import { ForceGraph } from './ForceGraph'
 import { Sidebar } from './Sidebar'
 
@@ -18,17 +18,15 @@ const readFocusFromUrl = (): Category | null =>
     : asCategory(new URLSearchParams(window.location.search).get('c'))
 
 /**
- * Orchestrates the overview → focused states over one live graph. Focus is held in
- * client state and mirrored to the URL via the native History API (?c=drone) so the
- * graph never remounts and there's no RSC round-trip, while links stay shareable and
- * Back/Forward work. Opening a project is a real navigation to /work/[slug].
+ * Drives the one-web model. The full graph is always rendered; `focus` (a category) is
+ * a soft emphasis — it dims the unrelated nodes, it does NOT filter them. Focus is
+ * mirrored to the URL as ?c=<category> via the History API (shareable, Back/Forward
+ * work) without remounting the graph. Activating a node routes by node type.
  */
 export function GraphExplorer({ graph }: { graph: Graph }) {
   const router = useRouter()
   const [focus, setFocusState] = useState<Category | null>(null)
 
-  // Initialize from the URL after mount (avoids SSR/CSR hydration mismatch), and
-  // keep in sync when the user uses Back/Forward.
   useEffect(() => {
     setFocusState(readFocusFromUrl())
     const onPop = () => setFocusState(readFocusFromUrl())
@@ -38,32 +36,48 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
 
   const setFocus = useCallback((next: Category | null) => {
     setFocusState(next)
-    const url = next ? `/?c=${next}` : '/'
-    window.history.pushState(null, '', url)
+    window.history.pushState(null, '', next ? `/?c=${next}` : '/')
   }, [])
 
-  const openProject = useCallback(
-    (slug: string) => router.push(`/work/${slug}`),
-    [router],
+  const activateNode = useCallback(
+    (node: GraphNode) => {
+      switch (node.type) {
+        case 'root':
+          setFocus(null)
+          break
+        case 'category':
+          // toggle: clicking the focused category again clears focus
+          setFocusState((prev) => {
+            const next = prev === node.category ? null : node.category!
+            window.history.pushState(null, '', next ? `/?c=${next}` : '/')
+            return next
+          })
+          break
+        case 'about':
+          router.push(node.url ?? '/about')
+          break
+        case 'project':
+          router.push(node.url ?? `/work/${node.id}`)
+          break
+      }
+    },
+    [router, setFocus],
   )
-
-  const subgraph = focus ? focusCategory(graph, focus) : graph
 
   return (
     <div className="flex h-[100dvh] flex-col md:flex-row">
       <aside className="shrink-0 overflow-auto border-line p-5 md:w-72 md:border-r md:bg-surface/40">
         <p className="mb-3 text-xs uppercase tracking-wide text-faint">
-          {focus ? `focused · ${focus}` : 'overview'}
+          {focus ? `focus · ${focus}` : 'overview'}
         </p>
         <Sidebar graph={graph} focus={focus} onFocus={setFocus} />
       </aside>
 
       <main className="relative hidden flex-1 md:block">
         <ForceGraph
-          graph={subgraph}
+          graph={graph}
           activeFocus={focus}
-          onFocusCategory={setFocus}
-          onOpenProject={openProject}
+          onActivateNode={activateNode}
         />
       </main>
     </div>

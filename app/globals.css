@@ -62,13 +62,3 @@ html {
     transition-duration: 0.01ms !important;
   }
 }
-
-/* ASCII sidebar tree helper — box-drawing glyphs as content markers. */
-.tree-branch::before {
-  content: '├── ';
-  color: var(--color-faint);
-}
-.tree-leaf::before {
-  content: '└── ';
-  color: var(--color-faint);
-}
