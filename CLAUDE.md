@@ -82,6 +82,11 @@ force simulation re-runs on the filtered subgraph on each transition.
 ## Repo conventions
 
 - `lib/graph.ts` is the only place that builds nodes/edges. Keep it pure.
+- Shared graph constants (e.g. `CATEGORIES` / the `Category` type) live in
+  `lib/categories.ts`, not `velite.config.ts`. `lib/graph.ts` runs inside the app
+  bundle, and importing `velite.config.ts` there drags Velite's build tooling
+  (esbuild's native binary) into the bundle and breaks `next build`. `velite.config.ts`
+  imports the categories from `lib/categories.ts`, so there is still one source of truth.
 - Conventional commits. Public repo — treat the repo itself as a portfolio piece
   (clean structure, strong README).
 - CI (GitHub Actions): lint, typecheck, build, Lighthouse budget, Playwright
