@@ -138,16 +138,45 @@ Auto-derivation is the default; these let a human override it:
 
 - `order` frontmatter — manual sort within a category (sidebar; seeds nothing else yet).
 - `pinned` frontmatter — force-show (today: label always visible; later: survives filters).
+- **Layout** — the view panel picks a layout: `auto` (content-based default) or a manual
+  override (`web` / `radial` / `tree` / `cluster`). Persisted in `view:v1` (below).
+- **Per-layer opacity** — depth (root / hubs / projects) × folder (the four categories);
+  a node's opacity is `depth[layer] × folder[category]`. This is how the graph reads as
+  deliberate layers without hiding anything. Persisted in `view:v1`.
 - **Hand-dragged node positions** — dragging a node pins it (`fx/fy`) and persists to
   `localStorage['portfolio:graph:positions:v1']` as `{ [id]: {x, y} }`, reapplied on
-  load. This is intentional client-only state that can diverge from the derived layout.
+  load. Pins win over the layout (the ultimate override); switching layout only
+  arranges the *un*pinned nodes. "Reset positions" in the panel clears them. Intentional
+  client-only state that can diverge from the derived layout.
 
-## View controls (NEXT session — not yet built)
+## Layouts
 
-An Obsidian-like control panel, deferred to the next session. Planned: sliders for
-repel force, link distance, center force; node-size scaling; label-fade threshold;
-filters by category / tag / search; toggle tag-edges; show/hide orphans. Persist all of
-it to `localStorage`. Do not build yet — this section is the spec.
+`lib/layouts.ts` (client-only; imports `d3-force`) owns the graph arrangements. Each is a
+*reconfiguration of the simulation's forces* (never static positions) so switching just
+reheats — node objects and drag pins survive. `layer` (BFS depth from root, computed in
+`lib/graph.ts`: root 0, hubs+about 1, projects 2) drives the concentric layouts and the
+per-layer opacity.
+
+- **web** — root pinned center + mild radial-by-layer → centralized organic web (fixes the
+  old "chain" look).
+- **radial** — strong radial-by-layer → clean concentric rings.
+- **cluster** — each folder anchored around the center → folders separate spatially.
+- **tree** — root top-center, y by layer → rough top-down hierarchy (a force approximation).
+
+`chooseDefaultLayout(graph)` is the "dynamic default": no cross-links → tree; densely
+interlinked → web; evenly spread → radial; else cluster. The panel's `auto` chip always
+shows this pick; a manual choice overrides the render but not the chip.
+
+## View controls (panel — part 1 built, rest deferred)
+
+`components/ViewControls.tsx` — a collapsible Obsidian-like panel, persisted to
+`localStorage['portfolio:graph:view:v1']` (`{ layout, depthOpacity, folderOpacity }`).
+
+- **Built:** the layout selector (auto + manual) and the per-layer opacity sliders (see
+  Manual control), plus "reset positions".
+- **Still deferred (next pass):** sliders for repel force / link distance / center force;
+  node-size scaling; label-fade threshold; filters by category / tag / search; toggle
+  tag-edges; show/hide orphans. Persist all to `localStorage`.
 
 ## Repo conventions
 
