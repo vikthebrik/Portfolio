@@ -1,39 +1,15 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import {
-  forceCenter,
-  forceCollide,
-  forceLink,
-  forceManyBody,
-  forceSimulation,
-  type Simulation,
-  type SimulationNodeDatum,
-} from 'd3-force'
+import { forceSimulation, type Simulation } from 'd3-force'
 import { select } from 'd3-selection'
 import { zoom as d3zoom, zoomIdentity, type ZoomBehavior } from 'd3-zoom'
-import {
-  ABOUT_ID,
-  ROOT_ID,
-  type EdgeKind,
-  type Graph,
-  type GraphEdge,
-  type GraphNode,
-} from '@/lib/graph'
+import type { Category } from '@/lib/categories'
+import { ROOT_ID, type EdgeKind, type Graph, type GraphNode } from '@/lib/graph'
+import { applyLayout, nodeRadius, type LayoutKind, type SimNode } from '@/lib/layouts'
 
-type SimNode = GraphNode & SimulationNodeDatum
-type SimEdge = { source: string; target: string }
+export const POSITIONS_KEY = 'portfolio:graph:positions:v1'
 
-const POSITIONS_KEY = 'portfolio:graph:positions:v1'
-
-// Per-edge-kind tuning. spoke binds root↔hub tight; membership pulls a project to its
-// hub; related is a medium bond; tag is a long faint thread.
-const LINK_DISTANCE: Record<EdgeKind, number> = {
-  spoke: 90,
-  membership: 70,
-  related: 120,
-  tag: 200,
-}
 const STROKE_WIDTH: Record<EdgeKind, number> = {
   spoke: 1.5,
   membership: 1.2,
@@ -47,21 +23,24 @@ const prefersReducedMotion = () =>
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
 
-const nodeRadius = (n: GraphNode) =>
-  n.type === 'root' ? 15 : n.type === 'project' ? 5 + Math.min(n.degree, 6) : 11
-
 /**
- * Obsidian-style force graph: circular nodes, soft curved links, hover/focus
- * highlight-with-dim, and labels that fade in with zoom. State-driven (cheap at ~12
- * nodes) so styling composes. Drag pins a node and persists its position to
- * localStorage; pan/zoom via d3-zoom (filtered off nodes so drag and pan don't fight).
+ * Obsidian-style force graph. Layout comes from `lib/layouts` (swappable force
+ * configs; the sim reheats without rebuilding, so drags survive). Node opacity is
+ * layered: depth-ring × folder, then dimmed further by hover/soft-focus emphasis.
+ * State-driven render (cheap at ~12 nodes) so all that styling composes.
  */
 export function ForceGraph({
   graph,
+  layout,
+  depthOpacity,
+  folderOpacity,
   activeFocus,
   onActivateNode,
 }: {
   graph: Graph
+  layout: LayoutKind
+  depthOpacity: number[] // indexed by node.layer (0 root, 1 hubs, 2 projects)
+  folderOpacity: Record<Category, number>
   activeFocus: string | null
   onActivateNode: (node: GraphNode) => void
 }) {
@@ -70,19 +49,17 @@ export function ForceGraph({
   const sceneRef = useRef<SVGGElement>(null)
   const simNodesRef = useRef<SimNode[]>([])
   const simRef = useRef<Simulation<SimNode, undefined> | null>(null)
+  const sizeRef = useRef({ w: 800, h: 600 })
+  const layoutRef = useRef(layout)
+  layoutRef.current = layout
   const rafPending = useRef(false)
 
   const [, setTick] = useState(0)
-  const [size, setSize] = useState({ w: 800, h: 600 })
   const [k, setK] = useState(1) // zoom scale → drives label fade
   const [hovered, setHovered] = useState<string | null>(null)
 
-  // Live position lookup — rebuilt each render so it always reflects the simulation's
-  // current node objects (cheap at this node count). Not memoized on graph: the sim
-  // populates simNodesRef *after* first render, so a memo would capture an empty map.
-  const byId = new Map<string, SimNode>(
-    simNodesRef.current.map((n) => [n.id, n]),
-  )
+  // Live position lookup — rebuilt each render from the sim-owned node objects.
+  const byId = new Map<string, SimNode>(simNodesRef.current.map((n) => [n.id, n]))
 
   const adjacency = useMemo(() => {
     const m = new Map<string, Set<string>>()
@@ -94,13 +71,24 @@ export function ForceGraph({
     return m
   }, [graph])
 
+  const reapplySavedPins = (nodes: SimNode[]) => {
+    const saved = loadPositions()
+    for (const n of nodes) {
+      const p = saved[n.id]
+      if (p) {
+        n.fx = p.x
+        n.fy = p.y
+      }
+    }
+  }
+
   // Build the simulation once per graph identity (the node set is stable per session).
   useEffect(() => {
     const wrap = wrapRef.current
     if (!wrap) return
     const w = wrap.clientWidth || 800
     const h = wrap.clientHeight || 600
-    setSize({ w, h })
+    sizeRef.current = { w, h }
 
     const saved = loadPositions()
     const nodes: SimNode[] = graph.nodes.map((n) => {
@@ -115,23 +103,12 @@ export function ForceGraph({
       return s
     })
     simNodesRef.current = nodes
-    const edges: SimEdge[] = graph.edges.map((e) => ({
-      source: e.source,
-      target: e.target,
-    }))
+    const edges = graph.edges.map((e) => ({ ...e })) // cloned — forceLink mutates these
 
     const sim = forceSimulation(nodes)
-      .force(
-        'link',
-        forceLink<SimNode, SimEdge>(edges)
-          .id((d) => d.id)
-          .distance((_l, i) => LINK_DISTANCE[graph.edges[i].kind])
-          .strength((_l, i) => graph.edges[i].weight),
-      )
-      .force('charge', forceManyBody<SimNode>().strength(-420))
-      .force('collide', forceCollide<SimNode>((n) => nodeRadius(n) + 26))
-      .force('center', forceCenter(w / 2, h / 2))
     simRef.current = sim
+    applyLayout(sim, layoutRef.current, { w, h, edges })
+    reapplySavedPins(nodes) // hand-drags win over the layout's root pin
 
     const requestPaint = () => {
       if (rafPending.current) return
@@ -154,9 +131,15 @@ export function ForceGraph({
       if (!wrap.clientWidth) return
       const nw = wrap.clientWidth
       const nh = wrap.clientHeight
-      setSize({ w: nw, h: nh })
-      sim.force('center', forceCenter(nw / 2, nh / 2))
-      if (!prefersReducedMotion()) sim.alpha(0.2).restart()
+      sizeRef.current = { w: nw, h: nh }
+      applyLayout(sim, layoutRef.current, { w: nw, h: nh, edges })
+      reapplySavedPins(nodes)
+      if (prefersReducedMotion()) {
+        sim.tick(120)
+        setTick((t) => t + 1)
+      } else {
+        sim.alpha(0.3).restart()
+      }
     })
     ro.observe(wrap)
 
@@ -167,6 +150,23 @@ export function ForceGraph({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [graph])
+
+  // Re-run the layout when the user switches it — reheat, keep nodes + pins.
+  useEffect(() => {
+    const sim = simRef.current
+    if (!sim) return
+    const { w, h } = sizeRef.current
+    const edges = graph.edges.map((e) => ({ ...e }))
+    applyLayout(sim, layout, { w, h, edges })
+    reapplySavedPins(sim.nodes())
+    if (prefersReducedMotion()) {
+      sim.tick(300)
+      setTick((t) => t + 1)
+    } else {
+      sim.alpha(0.6).restart()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layout])
 
   // Pan/zoom on the svg; ignore events that start on a node so drag still works.
   useEffect(() => {
@@ -179,7 +179,7 @@ export function ForceGraph({
       .scaleExtent([0.4, 4])
       .filter((event: Event) => {
         const t = event.target as Element
-        return !t.closest('[data-node]') // nodes handle their own drag
+        return !t.closest('[data-node]')
       })
       .on('zoom', (event) => setK(event.transform.k))
     const sel = select(svg)
@@ -251,10 +251,22 @@ export function ForceGraph({
   const isOn = (id: string) => !activeSet || activeSet.has(id)
   const pos = (id: string) => byId.get(id)
 
+  // Per-layer base opacity: depth ring × folder. Structural nodes have no folder → ×1.
+  const baseOpacity = (n: GraphNode) => {
+    const depth = depthOpacity[Math.min(n.layer, depthOpacity.length - 1)] ?? 1
+    const folder = n.category ? (folderOpacity[n.category] ?? 1) : 1
+    return depth * folder
+  }
+  const baseOf = (id: string) => {
+    const n = byId.get(id)
+    return n ? baseOpacity(n) : 1
+  }
+
   const labelOpacity = (n: GraphNode) => {
     if (!isOn(n.id)) return 0
-    if (n.type !== 'project' || n.pinned || hovered === n.id) return 1
-    return clamp((k - 0.7) / 0.8, 0, 1) // fade project labels in as you zoom in
+    const base = baseOpacity(n)
+    if (n.type !== 'project' || n.pinned || hovered === n.id) return base
+    return base * clamp((k - 0.7) / 0.8, 0, 1) // project labels fade in with zoom
   }
 
   return (
@@ -272,17 +284,17 @@ export function ForceGraph({
               const t = pos(e.target)
               if (!s) return null
               const on = !activeSet || (activeSet.has(e.source) && activeSet.has(e.target))
-              const touchesFocal = focal != null && (e.source === focal || e.target === focal)
+              const touchesFocal =
+                focal != null && (e.source === focal || e.target === focal)
+              const eBase = Math.min(baseOf(e.source), baseOf(e.target))
+              const emphasis = activeSet ? (on ? 0.9 : 0.06) : e.kind === 'tag' ? 0.5 : 0.8
               return (
                 <path
                   key={`${e.source}::${e.target}:${e.kind}`}
                   d={curve(s.x ?? 0, s.y ?? 0, t?.x ?? 0, t?.y ?? 0)}
                   fill="none"
                   className={touchesFocal && on ? 'stroke-clay' : 'stroke-line'}
-                  style={{
-                    strokeWidth: STROKE_WIDTH[e.kind],
-                    opacity: activeSet ? (on ? 0.9 : 0.06) : e.kind === 'tag' ? 0.5 : 0.8,
-                  }}
+                  style={{ strokeWidth: STROKE_WIDTH[e.kind], opacity: emphasis * eBase }}
                 />
               )
             })}
@@ -294,18 +306,25 @@ export function ForceGraph({
               const on = isOn(n.id)
               const isFocal = n.id === focal
               const r = nodeRadius(n)
+              const base = baseOpacity(n)
               const fill = isFocal
                 ? 'fill-clay'
                 : n.type === 'project'
                   ? 'fill-muted'
                   : 'fill-ink'
+              const sizeClass =
+                n.type === 'root'
+                  ? 'text-[12px] font-bold'
+                  : n.type === 'project'
+                    ? 'text-[10px]'
+                    : 'text-[11px]'
               return (
                 <g
                   key={n.id}
                   data-node
                   transform={`translate(${p?.x ?? 0},${p?.y ?? 0})`}
                   className="cursor-pointer"
-                  style={{ opacity: on ? 1 : 0.15 }}
+                  style={{ opacity: activeSet ? (on ? base : base * 0.12) : base }}
                   onPointerDown={onNodePointerDown(n as SimNode)}
                   onPointerEnter={() => setHovered(n.id)}
                   onPointerLeave={() => setHovered((h) => (h === n.id ? null : h))}
@@ -317,9 +336,8 @@ export function ForceGraph({
                     textAnchor="middle"
                     className={[
                       'select-none font-mono',
-                      n.type === 'project' ? 'text-[10px]' : 'text-[11px]',
+                      sizeClass,
                       isFocal ? 'fill-clay' : n.type === 'project' ? 'fill-muted' : 'fill-ink',
-                      n.type === 'root' || n.type === 'category' ? 'font-bold' : '',
                     ].join(' ')}
                     style={{ opacity: labelOpacity(n) }}
                   >
