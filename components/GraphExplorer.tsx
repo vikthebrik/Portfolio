@@ -95,10 +95,14 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
     [router, setFocus, focus],
   )
 
-  const resolvedLayout: LayoutKind = useMemo(
-    () => (view.layout === 'auto' ? chooseDefaultLayout(graph) : view.layout),
-    [view.layout, graph],
+  // What 'auto' resolves to for this content (always shown on the Auto chip) vs. the
+  // layout actually rendered (auto's pick, or the manual override).
+  const autoDefault: LayoutKind = useMemo(
+    () => chooseDefaultLayout(graph),
+    [graph],
   )
+  const resolvedLayout: LayoutKind =
+    view.layout === 'auto' ? autoDefault : view.layout
 
   const resetPositions = useCallback(() => {
     try {
@@ -121,7 +125,7 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
       <main className="relative hidden flex-1 md:block">
         <ViewControls
           layout={view.layout}
-          resolvedLayout={resolvedLayout}
+          autoDefault={autoDefault}
           onLayoutChange={(next) => setView((v) => ({ ...v, layout: next }))}
           depthOpacity={view.depthOpacity}
           onDepthChange={(i, val) =>

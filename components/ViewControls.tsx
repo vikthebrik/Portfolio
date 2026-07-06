@@ -13,7 +13,7 @@ const DEPTH_LABELS = ['root', 'hubs', 'projects'] as const
  */
 export function ViewControls({
   layout,
-  resolvedLayout,
+  autoDefault,
   onLayoutChange,
   depthOpacity,
   onDepthChange,
@@ -22,7 +22,7 @@ export function ViewControls({
   onResetPositions,
 }: {
   layout: 'auto' | LayoutKind
-  resolvedLayout: LayoutKind
+  autoDefault: LayoutKind // what 'auto' resolves to for this content (always shown on the Auto chip)
   onLayoutChange: (next: 'auto' | LayoutKind) => void
   depthOpacity: number[]
   onDepthChange: (index: number, value: number) => void
@@ -44,13 +44,12 @@ export function ViewControls({
       </button>
 
       {open && (
-        <div className="mt-1 w-56 border border-line bg-surface p-3">
+        <div className="mt-1 w-64 border border-line bg-surface p-3">
           <Section label="layout">
             <div className="flex flex-wrap gap-1">
               {(['auto', ...LAYOUTS] as const).map((opt) => {
                 const active = layout === opt
-                const text =
-                  opt === 'auto' ? `auto (${resolvedLayout})` : opt
+                const text = opt === 'auto' ? `auto (${autoDefault})` : opt
                 return (
                   <button
                     key={opt}
@@ -132,7 +131,7 @@ function Slider({
 }) {
   return (
     <label className="flex items-center gap-2 py-0.5">
-      <span className="w-16 shrink-0 text-muted">{label}</span>
+      <span className="w-14 shrink-0 text-muted">{label}</span>
       <input
         type="range"
         min={0}
@@ -140,10 +139,10 @@ function Slider({
         step={0.05}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="h-1 flex-1 accent-clay"
+        className="h-1 min-w-0 flex-1 accent-clay"
         aria-label={`${label} opacity`}
       />
-      <span className="w-8 shrink-0 text-right tabular-nums text-faint">
+      <span className="w-9 shrink-0 text-right tabular-nums text-faint">
         {value.toFixed(2)}
       </span>
     </label>

@@ -113,11 +113,12 @@ export function applyLayout(
       break
 
     case 'radial':
-      // Clean concentric rings by depth; weak charge + weak links let rings dominate.
-      sim.force('charge', forceManyBody<SimNode>().strength(-120))
+      // Clean concentric rings by depth; charge spreads nodes *around* each ring so
+      // they don't pile on one side, while weak links let the radius dominate.
+      sim.force('charge', forceManyBody<SimNode>().strength(-320))
       sim.force(
         'radial',
-        forceRadial<SimNode>((n) => n.layer * RING, cx, cy).strength(0.9),
+        forceRadial<SimNode>((n) => n.layer * RING, cx, cy).strength(0.95),
       )
       break
 
