@@ -26,6 +26,7 @@ export type GraphNode = {
   pinned: boolean // force-show (manual override)
   order?: number // manual sort within a category
   degree: number // populated after edges are built; drives node size
+  layer: number // BFS depth from root (0 root, 1 hubs+about, 2 projects); drives layout rings + per-layer opacity
 }
 
 export type EdgeKind = 'spoke' | 'membership' | 'related' | 'tag'
@@ -54,6 +55,7 @@ export function buildGraph(): Graph {
     featured: false,
     pinned: true,
     degree: 0,
+    layer: 0,
   })
 
   // 1. Hub nodes, one per category, plus a spoke from root.
@@ -66,6 +68,7 @@ export function buildGraph(): Graph {
       featured: false,
       pinned: false,
       degree: 0,
+      layer: 1,
     })
     edgeMap.set(undirectedKey(ROOT_ID, category), {
       source: ROOT_ID,
@@ -84,6 +87,7 @@ export function buildGraph(): Graph {
     featured: false,
     pinned: true,
     degree: 0,
+    layer: 1,
   })
   edgeMap.set(undirectedKey(ROOT_ID, ABOUT_ID), {
     source: ROOT_ID,
@@ -104,6 +108,7 @@ export function buildGraph(): Graph {
       pinned: p.pinned,
       order: p.order,
       degree: 0,
+      layer: 2,
     })
 
     edgeMap.set(undirectedKey(p.slug, p.category), {
@@ -158,6 +163,29 @@ export function buildGraph(): Graph {
   for (const e of edges) {
     nodeMap.get(e.source)!.degree++
     nodeMap.get(e.target)!.degree++
+  }
+
+  // 7. Layer pass — BFS depth from root drives the layout rings + per-layer opacity.
+  //    Authoritative (the literal `layer` above is just a type-satisfying default);
+  //    deriving it keeps depth correct if the topology ever changes.
+  const adjacency = new Map<string, string[]>()
+  for (const id of nodeMap.keys()) adjacency.set(id, [])
+  for (const e of edges) {
+    adjacency.get(e.source)!.push(e.target)
+    adjacency.get(e.target)!.push(e.source)
+  }
+  const queue: string[] = [ROOT_ID]
+  const seen = new Set<string>([ROOT_ID])
+  nodeMap.get(ROOT_ID)!.layer = 0
+  while (queue.length) {
+    const id = queue.shift()!
+    const depth = nodeMap.get(id)!.layer
+    for (const next of adjacency.get(id)!) {
+      if (seen.has(next)) continue
+      seen.add(next)
+      nodeMap.get(next)!.layer = depth + 1
+      queue.push(next)
+    }
   }
 
   return { nodes: [...nodeMap.values()], edges }
