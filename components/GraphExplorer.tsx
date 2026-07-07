@@ -23,13 +23,13 @@ const VIEW_KEY = 'portfolio:graph:view:v1'
 
 type ViewState = {
   layout: 'auto' | LayoutKind
-  depthOpacity: number[] // [root, hubs, projects]
+  projectOpacity: number // root/hubs always on; only projects are dimmable
   folderOpacity: Record<Category, number>
 }
 
 const defaultView = (): ViewState => ({
   layout: 'auto',
-  depthOpacity: [1, 0.95, 0.55], // projects recede by default → calmer overview
+  projectOpacity: 0.55, // projects recede by default → calmer overview
   folderOpacity: Object.fromEntries(CATEGORIES.map((c) => [c, 1])) as Record<
     Category,
     number
@@ -127,13 +127,9 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
           layout={view.layout}
           autoDefault={autoDefault}
           onLayoutChange={(next) => setView((v) => ({ ...v, layout: next }))}
-          depthOpacity={view.depthOpacity}
-          onDepthChange={(i, val) =>
-            setView((v) => {
-              const depthOpacity = [...v.depthOpacity]
-              depthOpacity[i] = val
-              return { ...v, depthOpacity }
-            })
+          projectOpacity={view.projectOpacity}
+          onProjectOpacityChange={(val) =>
+            setView((v) => ({ ...v, projectOpacity: val }))
           }
           folderOpacity={view.folderOpacity}
           onFolderChange={(cat, val) =>
@@ -148,7 +144,7 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
           key={remountKey}
           graph={graph}
           layout={resolvedLayout}
-          depthOpacity={view.depthOpacity}
+          projectOpacity={view.projectOpacity}
           folderOpacity={view.folderOpacity}
           activeFocus={focus}
           onActivateNode={activateNode}

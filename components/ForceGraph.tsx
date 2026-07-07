@@ -32,14 +32,14 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 export function ForceGraph({
   graph,
   layout,
-  depthOpacity,
+  projectOpacity,
   folderOpacity,
   activeFocus,
   onActivateNode,
 }: {
   graph: Graph
   layout: LayoutKind
-  depthOpacity: number[] // indexed by node.layer (0 root, 1 hubs, 2 projects)
+  projectOpacity: number // root/hubs are always on; only projects are dimmable
   folderOpacity: Record<Category, number>
   activeFocus: string | null
   onActivateNode: (node: GraphNode) => void
@@ -251,11 +251,13 @@ export function ForceGraph({
   const isOn = (id: string) => !activeSet || activeSet.has(id)
   const pos = (id: string) => byId.get(id)
 
-  // Per-layer base opacity: depth ring × folder. Structural nodes have no folder → ×1.
+  // Base opacity: root/hubs/about are always on (1); only projects are dimmable, by the
+  // projects slider × their folder slider. Folder opacity thus dims a category's
+  // projects, never its hub.
   const baseOpacity = (n: GraphNode) => {
-    const depth = depthOpacity[Math.min(n.layer, depthOpacity.length - 1)] ?? 1
+    if (n.type !== 'project') return 1
     const folder = n.category ? (folderOpacity[n.category] ?? 1) : 1
-    return depth * folder
+    return projectOpacity * folder
   }
   const baseOf = (id: string) => {
     const n = byId.get(id)
@@ -263,10 +265,13 @@ export function ForceGraph({
   }
 
   const labelOpacity = (n: GraphNode) => {
+    // Structural nodes are always labelled (emphasis dimming still applies via the
+    // group's opacity); project labels fade with zoom unless pinned/hovered.
+    if (n.type !== 'project') return 1
     if (!isOn(n.id)) return 0
     const base = baseOpacity(n)
-    if (n.type !== 'project' || n.pinned || hovered === n.id) return base
-    return base * clamp((k - 0.7) / 0.8, 0, 1) // project labels fade in with zoom
+    if (n.pinned || hovered === n.id) return base
+    return base * clamp((k - 0.7) / 0.8, 0, 1)
   }
 
   return (

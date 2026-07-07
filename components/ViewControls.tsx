@@ -4,19 +4,18 @@ import { useState } from 'react'
 import { CATEGORIES, type Category } from '@/lib/categories'
 import { LAYOUTS, type LayoutKind } from '@/lib/layouts'
 
-const DEPTH_LABELS = ['root', 'hubs', 'projects'] as const
-
 /**
- * Obsidian-style view panel (part 1): layout selector + per-layer opacity. Everything
- * here is a manual override on top of the dynamic defaults — state + persistence live
- * in GraphExplorer. Collapsible so it stays out of the way. Tokens + mono only.
+ * Obsidian-style view panel (part 1): layout selector + opacity. Root & hubs are always
+ * on, so opacity only exposes projects (one slider) and per-folder muting. Everything
+ * here is a manual override on top of the dynamic defaults — state + persistence live in
+ * GraphExplorer. Collapsible so it stays out of the way. Tokens + mono only.
  */
 export function ViewControls({
   layout,
   autoDefault,
   onLayoutChange,
-  depthOpacity,
-  onDepthChange,
+  projectOpacity,
+  onProjectOpacityChange,
   folderOpacity,
   onFolderChange,
   onResetPositions,
@@ -24,8 +23,8 @@ export function ViewControls({
   layout: 'auto' | LayoutKind
   autoDefault: LayoutKind // what 'auto' resolves to for this content (always shown on the Auto chip)
   onLayoutChange: (next: 'auto' | LayoutKind) => void
-  depthOpacity: number[]
-  onDepthChange: (index: number, value: number) => void
+  projectOpacity: number
+  onProjectOpacityChange: (value: number) => void
   folderOpacity: Record<Category, number>
   onFolderChange: (category: Category, value: number) => void
   onResetPositions: () => void
@@ -70,15 +69,13 @@ export function ViewControls({
             </div>
           </Section>
 
-          <Section label="opacity · depth">
-            {DEPTH_LABELS.map((lbl, i) => (
-              <Slider
-                key={lbl}
-                label={lbl}
-                value={depthOpacity[i] ?? 1}
-                onChange={(v) => onDepthChange(i, v)}
-              />
-            ))}
+          <Section label="opacity · projects">
+            <Slider
+              label="projects"
+              value={projectOpacity}
+              onChange={onProjectOpacityChange}
+            />
+            <p className="mt-1 text-faint">root &amp; hubs are always on</p>
           </Section>
 
           <Section label="opacity · folder">
