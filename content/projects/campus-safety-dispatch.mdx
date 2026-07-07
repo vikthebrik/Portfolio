@@ -1,0 +1,41 @@
+---
+title: UO Campus Safety Dispatch
+slug: campus-safety-dispatch
+category: tech
+summary: A full-stack incident reporting and dispatch platform — anonymous public submission, a real-time kanban dispatch board for safety staff, and a read-only executive overlay — built on Next.js, Express, and Supabase.
+tags: [full-stack, databases, real-time, performance, data-viz]
+related: [graph-query-engine, ascii-design-system]
+year: 2026
+links:
+  repo: https://github.com/vikthebrik/InterviewProj
+  demo: https://interview-proj-waph.vercel.app
+---
+
+## Overview
+
+An internal reporting and dispatch platform for University of Oregon Campus Safety, serving
+three audiences from one codebase: the public submits incidents anonymously at `/`, safety
+staff triage them on a real-time dispatch board at `/admin`, and executives get a read-only
+analytics overlay on the same board. The design mirrors professional CAD/dispatch tools while
+keeping UO's visual identity.
+
+## Approach
+
+- **Kanban dispatch board** — Pending → Under Review → Closed, cards sorted by priority tier
+  then age, with search, multi-select priority/tag filters, and an officer roster strip.
+- **Automatic priority + tags** — P1–P4 and tags (`MEDICAL`, `FIRE`, …) derived from incident
+  type; reports older than 30 minutes flag an animated OVERDUE badge.
+- **Role-based access** — anonymous / reporter / admin / executive, enforced in middleware and
+  again with Postgres Row-Level Security; executives see the board but no PII or controls.
+- **Real-time** — Supabase Realtime → Express SSE → browser `EventSource`, so new reports
+  appear without a refresh.
+- **Infrastructure** — a Node.js `cluster` load balancer (up to 4 workers, auto-restart),
+  PM2 for production, and materialized views for analytics queries.
+
+## Stack
+
+Next.js 16 (App Router) + React 19 + Tailwind v4 on Vercel; Express 5 on Render; Supabase
+(PostgreSQL 15, Auth, Realtime, Storage); Recharts for the analytics overlay.
+
+{/* Imported from GitHub — draft distilled from the repo README. The live demo is linked
+above; add a board screenshot once hosted externally. */}
