@@ -96,16 +96,22 @@ sparingly).
 Type stays mono-forward (JetBrains Mono) for labels and UI. The graph is **Obsidian-
 style**, not ASCII:
 
-- Nodes are **circles** (radius by degree/type: root largest → hubs → projects) with
-  the **title only** beneath — no `[ brackets ]`, no summary on the node.
-- Labels **fade in/out with zoom**: structural labels (root/hubs/how-it-works) always
-  show; project labels fade in as you zoom in (and a `pinned` project always shows).
+- Nodes are **circles** sized by **layer** (root largest → hubs → projects; small
+  degree bump for projects) with the **title only** beneath — no `[ brackets ]`, no
+  summary on the node.
+- **Root, hubs, and how-it-works are always on**: fixed full opacity and always
+  labelled — the structural skeleton never fades. The opacity controls (projects
+  slider × folder sliders) only dim *projects*.
+- Project labels **fade in/out with zoom** (a `pinned`, hovered, or search-matched
+  project always shows its label).
 - Links are **soft curved** paths (quadratic bézier), not dashed line-art.
 - **Hover** highlights a node's connections and dims the rest; **soft focus** (clicking
-  a category) fades/minimizes the unrelated nodes. Clay marks only what's emphasized.
+  a category) fades/minimizes the unrelated nodes; **search** emphasizes matches. Clay
+  marks only what's emphasized.
 
 The sidebar is a **clean names-only file tree** (project titles, no descriptions, no
-box-drawing glyphs). Resist adding color; the restraint is the point.
+box-drawing glyphs) with a **search** box at its top. Resist adding color; the
+restraint is the point.
 
 (Pivoted 2026-06: away from the earlier full-ASCII treatment — bracket nodes,
 box-drawing sidebar, dashed line-art edges — toward this Obsidian-style graph.)
@@ -127,6 +133,15 @@ One always-visible web; navigation is emphasis + routing, not subgraph filtering
   clears focus.
 - **detail** — a project's case study at `/work/[slug]` (RSC, unchanged). `how it
   works` routes to `/about`.
+- **search** — the sidebar search box matches project title/tags: the graph emphasizes
+  matches (dims the rest, same mechanism as hover/focus) and the sidebar tree filters to
+  matches. Transient, not persisted.
+- **minimap** — a persistent panel bottom-right (`components/Minimap.tsx`, mounted in
+  `app/layout.tsx`). On the main graph it mirrors the live layout and draws a draggable
+  **viewport box** that pans the big graph; on **detail pages** (where the big graph is
+  hidden) it runs its own headless layout, highlights the current node, and lets you
+  click any node to traverse without going back. Main graph ↔ minimap talk through
+  `components/GraphBridge.tsx` (a ref-based bridge — no re-render storms). Hidden on mobile.
 
 The simulation runs once over the full web and does **not** re-run on focus — focus
 and hover only change styling. (`focusCategory()` from the old filtered-subgraph model
@@ -140,9 +155,10 @@ Auto-derivation is the default; these let a human override it:
 - `pinned` frontmatter — force-show (today: label always visible; later: survives filters).
 - **Layout** — the view panel picks a layout: `auto` (content-based default) or a manual
   override (`web` / `radial` / `tree` / `cluster`). Persisted in `view:v1` (below).
-- **Per-layer opacity** — depth (root / hubs / projects) × folder (the four categories);
-  a node's opacity is `depth[layer] × folder[category]`. This is how the graph reads as
-  deliberate layers without hiding anything. Persisted in `view:v1`.
+- **Opacity** — root/hubs/how-it-works are always on; a project's opacity is
+  `projectOpacity × folderOpacity[category]` (one projects slider + four folder sliders).
+  This is how the graph reads as deliberate layers without hiding the structure.
+  Persisted in `view:v1`.
 - **Hand-dragged node positions** — dragging a node pins it (`fx/fy`) and persists to
   `localStorage['portfolio:graph:positions:v1']` as `{ [id]: {x, y} }`, reapplied on
   load. Pins win over the layout (the ultimate override); switching layout only
@@ -170,13 +186,14 @@ shows this pick; a manual choice overrides the render but not the chip.
 ## View controls (panel — part 1 built, rest deferred)
 
 `components/ViewControls.tsx` — a collapsible Obsidian-like panel, persisted to
-`localStorage['portfolio:graph:view:v1']` (`{ layout, depthOpacity, folderOpacity }`).
+`localStorage['portfolio:graph:view:v1']` (`{ layout, projectOpacity, folderOpacity }`).
 
-- **Built:** the layout selector (auto + manual) and the per-layer opacity sliders (see
-  Manual control), plus "reset positions".
+- **Built:** the layout selector (auto + manual); the opacity sliders (one `projects`
+  slider + four folder sliders — root/hubs are always on) plus "reset positions". Search
+  lives in the sidebar (not this panel); the minimap is its own persistent component.
 - **Still deferred (next pass):** sliders for repel force / link distance / center force;
-  node-size scaling; label-fade threshold; filters by category / tag / search; toggle
-  tag-edges; show/hide orphans. Persist all to `localStorage`.
+  node-size scaling; label-fade threshold; category/tag filters; toggle tag-edges;
+  show/hide orphans. Persist all to `localStorage`.
 
 ## Repo conventions
 

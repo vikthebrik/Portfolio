@@ -101,12 +101,9 @@ export default async function CaseStudy({
             {related.map((r) => (
               <li key={r.slug}>
                 <span aria-hidden className="text-faint select-none">
-                  └──{' '}
+                  ·{' '}
                 </span>
-                <Link
-                  href={r.url}
-                  className="text-muted hover:text-clay"
-                >
+                <Link href={r.url} className="text-muted hover:text-clay">
                   {r.title}
                 </Link>
               </li>
