@@ -11,9 +11,10 @@ Obsidian style. The landing view is a single living web centered on a **ROOT nod
 (the landing itself) with **five spokes**: the four category hubs plus a
 `how it works` node. Projects hang off their category; `related`/`tag` edges
 cross-link everything into a web. Hovering a node highlights its connections and
-dims the rest; clicking a category sets a soft focus that fades/minimizes the
-unrelated nodes (no filtering — the whole web stays on screen). A names-only file
-tree in the sidebar is the accessible, keyboard-navigable path through everything.
+dims the rest; clicking any node **re-roots** the web on it (reheats the layout to
+center on it, glides the camera, emphasizes its cluster) while the whole web stays on
+screen — no filtering. A names-only file tree in the sidebar is the accessible,
+keyboard-navigable path through everything.
 
 Four top-level categories (hub nodes): `tech`, `design`, `drone`, `research`.
 
@@ -105,9 +106,9 @@ style**, not ASCII:
 - Project labels **fade in/out with zoom** (a `pinned`, hovered, or search-matched
   project always shows its label).
 - Links are **soft curved** paths (quadratic bézier), not dashed line-art.
-- **Hover** highlights a node's connections and dims the rest; **soft focus** (clicking
-  a category) fades/minimizes the unrelated nodes; **search** emphasizes matches. Clay
-  marks only what's emphasized.
+- **Hover** highlights a node's connections and dims the rest; **re-root** (clicking any
+  node) recenters the web on it and fades/minimizes the unrelated nodes; **search**
+  emphasizes matches. Clay marks only what's emphasized (the centered node included).
 
 The sidebar is a **clean names-only file tree** (project titles, no descriptions, no
 box-drawing glyphs) with a **search** box at its top. Resist adding color; the
@@ -125,27 +126,35 @@ instant state transitions).
 
 One always-visible web; navigation is emphasis + routing, not subgraph filtering:
 
-- **overview** — the full web. No node is hidden.
-- **soft focus** — clicking a category hub emphasizes that cluster (hub + its projects
-  + their edges + the root spoke) and fades/minimizes everything else. Synced to the
-  URL as `?c=<category>` (a shareable deep link; Back/Forward work) via the History
-  API, so the graph never remounts. Clicking root (or the focused category again)
-  clears focus.
+- **overview** — the full web, rooted on `root`. No node is hidden.
+- **re-root** — clicking **any** node (a category hub *or* a project) makes it the new
+  center: the layout reheats so the web rings by graph-distance *from it* (`applyLayout`'s
+  `centerId`), the camera glides to frame it, and its cluster (the node + its direct
+  neighbors) is emphasized while everything else fades/minimizes. The full web stays on
+  screen — nothing is filtered. Synced to the URL as `?focus=<nodeId>` (a shareable deep
+  link) via the History API, so the graph never remounts and **browser Back/Forward — plus
+  the in-graph `‹ ›` buttons — traverse the re-root history**. Clicking `root`, the centered
+  hub again, or "overview" in the breadcrumb clears back to the root. A *project* takes one
+  click to center; clicking the already-centered project (or the breadcrumb's `open ↵`)
+  opens its case study.
 - **detail** — a project's case study at `/work/[slug]` (RSC, unchanged). `how it
   works` routes to `/about`.
 - **search** — the sidebar search box matches project title/tags: the graph emphasizes
-  matches (dims the rest, same mechanism as hover/focus) and the sidebar tree filters to
+  matches (dims the rest, same mechanism as hover/re-root) and the sidebar tree filters to
   matches. Transient, not persisted.
 - **minimap** — a persistent panel bottom-right (`components/Minimap.tsx`, mounted in
-  `app/layout.tsx`). On the main graph it mirrors the live layout and draws a draggable
-  **viewport box** that pans the big graph; on **detail pages** (where the big graph is
-  hidden) it runs its own headless layout, highlights the current node, and lets you
-  click any node to traverse without going back. Main graph ↔ minimap talk through
-  `components/GraphBridge.tsx` (a ref-based bridge — no re-render storms). Hidden on mobile.
+  `app/layout.tsx`). On the main graph it mirrors the live layout, **rings the current
+  center** (from the bridge snapshot), draws a draggable **viewport box** that pans the big
+  graph, and clicking a node re-roots the big graph in place (via the bridge's center
+  channel — no page load); on **detail pages** (where the big graph is hidden) it runs its
+  own headless layout, highlights the current node, and lets you click any node to traverse
+  without going back. Main graph ↔ minimap talk through `components/GraphBridge.tsx` (a
+  ref-based bridge: snapshot + pan + center channels — no re-render storms). Hidden on mobile.
 
-The simulation runs once over the full web and does **not** re-run on focus — focus
-and hover only change styling. (`focusCategory()` from the old filtered-subgraph model
-is retired.)
+The simulation runs once and is never rebuilt on navigation; a re-root **reheats** it
+(same node objects, new center pin + ring distances) rather than re-running from scratch —
+it only ever changes forces + styling, never filters the web. Hand-drag pins still win over
+the center pin. (`focusCategory()` from the old filtered-subgraph model is retired.)
 
 ## Manual control (override the auto-derivation)
 
@@ -169,15 +178,18 @@ Auto-derivation is the default; these let a human override it:
 
 `lib/layouts.ts` (client-only; imports `d3-force`) owns the graph arrangements. Each is a
 *reconfiguration of the simulation's forces* (never static positions) so switching just
-reheats — node objects and drag pins survive. `layer` (BFS depth from root, computed in
-`lib/graph.ts`: root 0, hubs+about 1, projects 2) drives the concentric layouts and the
-per-layer opacity.
+reheats — node objects and drag pins survive. Exactly one node is pinned as the anchor:
+the **center** (`applyLayout`'s `centerId`, default `root`). The concentric rings/rows use
+**graph-distance from the center** (a BFS in `applyLayout`); when the center *is* root this
+equals `layer` (BFS depth from root, computed in `lib/graph.ts`: root 0, hubs+about 1,
+projects 2) — one code path. Re-rooting on another node just pins it and re-rings around it.
+`layer` still drives per-layer node size + opacity.
 
-- **web** — root pinned center + mild radial-by-layer → centralized organic web (fixes the
+- **web** — center pinned + mild radial-by-distance → centralized organic web (fixes the
   old "chain" look).
-- **radial** — strong radial-by-layer → clean concentric rings.
+- **radial** — strong radial-by-distance → clean concentric rings.
 - **cluster** — each folder anchored around the center → folders separate spatially.
-- **tree** — root top-center, y by layer → rough top-down hierarchy (a force approximation).
+- **tree** — center top, y by distance-from-center → rough top-down hierarchy rooted at it.
 
 `chooseDefaultLayout(graph)` is the "dynamic default": no cross-links → tree; densely
 interlinked → web; evenly spread → radial; else cluster. The panel's `auto` chip always
