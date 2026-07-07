@@ -35,9 +35,13 @@ const RING = 150 // radius added per layer (web/radial)
 const ROW = 130 // vertical gap per layer (tree)
 const CLUSTER_R = 220 // distance of each folder anchor from center (cluster)
 
-// Node circle radius — shared by the renderer and the collision force so they agree.
-export const nodeRadius = (n: GraphNode): number =>
-  n.type === 'root' ? 15 : n.type === 'project' ? 5 + Math.min(n.degree, 6) : 11
+// Node circle radius — layer-first (root biggest → hubs → projects), with a small
+// degree bump for projects. Shared by the renderer and the collision force so they agree.
+const RADIUS_BY_LAYER = [16, 10, 6]
+export const nodeRadius = (n: GraphNode): number => {
+  const base = RADIUS_BY_LAYER[Math.min(n.layer, RADIUS_BY_LAYER.length - 1)]
+  return n.type === 'project' ? base + Math.min(n.degree, 6) * 0.6 : base
+}
 
 /**
  * Content-based default: the "dynamic default" the user layers manual choice on top of.
