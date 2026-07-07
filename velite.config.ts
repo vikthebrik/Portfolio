@@ -22,7 +22,7 @@ const projects = defineCollection({
   schema: s
     .object({
       title: s.string().max(100),
-      slug: s.slug('project'), // unique slug, e.g. "autonomous-mapping-drone"
+      slug: s.slug('project'), // unique slug, e.g. "mcc-scheduler"
       category: s.enum(CATEGORIES),
       summary: s.string().max(280), // one-line for node hover + cards
       tags: s.array(s.string()).default([]),

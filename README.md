@@ -28,7 +28,7 @@ CLAUDE.md              project memory for Claude Code / Antigravity
 
 Drop a new file in `content/projects/`. Set `category`, `summary`, `tags`, and
 `related`. The graph rebuilds itself — no component or config edits. See
-`autonomous-mapping-drone.mdx` for the shape.
+`mcc-scheduler.mdx` for the shape.
 
 ## Media (read before uploading anything large)
 
