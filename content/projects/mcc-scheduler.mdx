@@ -1,0 +1,48 @@
+---
+title: MCC Scheduler
+slug: mcc-scheduler
+category: tech
+summary: A calendar aggregator for UO Multicultural Center student orgs — officers sync their Outlook calendars once, students browse every MCC event in one place and subscribe to personalized ICS feeds filtered by club or type. Deployed and in active use.
+tags: [full-stack, databases, typescript, web]
+related: [campus-safety-dispatch, graph-query-engine]
+year: 2026
+featured: true
+links:
+  repo: https://github.com/vikthebrik/CS422
+  live: https://uomcc.org
+---
+
+## Overview
+
+MCC Scheduler is a calendar aggregator for the University of Oregon
+[Multicultural Center](https://mcc.uoregon.edu/) student organizations. Club officers sync
+their Outlook calendars once; students then browse all MCC events in a single place and
+subscribe to personalized ICS feeds filtered by club, event type, or any combination — so
+their own calendar app stays up to date automatically.
+
+Built as the capstone for **CS 422: Software Methodology** (Winter 2026), but as a real
+deployment rather than a class exercise: it was handed off to MCC staff and remains in active
+use beyond the course.
+
+## Architecture
+
+A TypeScript monorepo, deployed across two hosts:
+
+- **`frontend/`** — a Vite + React 18 + Tailwind SPA (Vercel), the browse-and-subscribe UI.
+- **`server/`** — an Express REST API plus an ICS sync cron (Render): `node-ical` parses each
+  club's Outlook feed into a normalized Postgres schema, and `ical-generator` exports the
+  filtered subscription feeds students consume.
+- **Supabase (PostgreSQL, 3NF)** for storage; **Resend** for transactional email (account
+  approval, password reset).
+
+The repo also carries an Obsidian-style docs wiki (`docs/`) and operational runbooks
+(`plans/`) for deployment and club-officer onboarding.
+
+## Roles
+
+Club officers connect a calendar and manage their org; students discover events and build a
+personalized subscription; the feed stays live without any manual re-import.
+
+{/* Imported from GitHub — draft distilled from the CS422 repo README (the repo IS the MCC
+Scheduler project). Refine, and add a UI screenshot of the browse/subscribe flow once hosted
+externally (the repo's system_architecture.png is not a media host — don't commit it). */}
