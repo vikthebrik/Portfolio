@@ -7,6 +7,7 @@ import { zoom as d3zoom, zoomIdentity, type ZoomBehavior } from 'd3-zoom'
 import type { Category } from '@/lib/categories'
 import { ROOT_ID, type EdgeKind, type Graph, type GraphNode } from '@/lib/graph'
 import { applyLayout, nodeRadius, type LayoutKind, type SimNode } from '@/lib/layouts'
+import { useGraphBridge, type Transform } from './GraphBridge'
 
 export const POSITIONS_KEY = 'portfolio:graph:positions:v1'
 
@@ -55,10 +56,25 @@ export function ForceGraph({
   const layoutRef = useRef(layout)
   layoutRef.current = layout
   const rafPending = useRef(false)
+  const transformRef = useRef<Transform>({ x: 0, y: 0, k: 1 })
+  const bridge = useGraphBridge()
 
   const [, setTick] = useState(0)
-  const [k, setK] = useState(1) // zoom scale → drives label fade
+  const [transform, setTransform] = useState<Transform>({ x: 0, y: 0, k: 1 })
+  const k = transform.k // zoom scale → drives label fade
   const [hovered, setHovered] = useState<string | null>(null)
+
+  // Publish a live snapshot to the bridge (for the minimap). Cheap: writes a ref.
+  const publish = () => {
+    if (!bridge) return
+    const positions: Record<string, { x: number; y: number }> = {}
+    for (const n of simNodesRef.current) positions[n.id] = { x: n.x ?? 0, y: n.y ?? 0 }
+    bridge.snapshotRef.current = {
+      positions,
+      bounds: sizeRef.current,
+      transform: transformRef.current,
+    }
+  }
 
   // Live position lookup — rebuilt each render from the sim-owned node objects.
   const byId = new Map<string, SimNode>(simNodesRef.current.map((n) => [n.id, n]))
@@ -118,6 +134,7 @@ export function ForceGraph({
       requestAnimationFrame(() => {
         rafPending.current = false
         setTick((t) => t + 1)
+        publish()
       })
     }
 
@@ -125,6 +142,7 @@ export function ForceGraph({
       sim.stop()
       sim.tick(300)
       setTick((t) => t + 1)
+      publish()
     } else {
       sim.on('tick', requestPaint)
     }
@@ -149,6 +167,7 @@ export function ForceGraph({
       ro.disconnect()
       sim.stop()
       sim.on('tick', null)
+      if (bridge) bridge.snapshotRef.current = null // stale once the main graph unmounts
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [graph])
@@ -170,7 +189,9 @@ export function ForceGraph({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layout])
 
-  // Pan/zoom on the svg; ignore events that start on a node so drag still works.
+  // Pan/zoom on the svg; ignore events that start on a node so drag still works. The
+  // full transform (translate + scale) is applied to the scene and published so the
+  // minimap can draw the viewport box; the minimap drives pans back through `panHandler`.
   useEffect(() => {
     const svg = svgRef.current
     if (!svg) return
@@ -183,13 +204,32 @@ export function ForceGraph({
         const t = event.target as Element
         return !t.closest('[data-node]')
       })
-      .on('zoom', (event) => setK(event.transform.k))
+      .on('zoom', (event) => {
+        const t = {
+          x: event.transform.x,
+          y: event.transform.y,
+          k: event.transform.k,
+        }
+        transformRef.current = t
+        setTransform(t)
+        publish()
+      })
     const sel = select(svg)
     sel.call(behavior)
+
+    bridge?.setPanHandler((t) => {
+      select(svg).call(
+        behavior.transform,
+        zoomIdentity.translate(t.x, t.y).scale(t.k),
+      )
+    })
+
     return () => {
       sel.on('.zoom', null)
+      bridge?.setPanHandler(null)
     }
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bridge])
 
   // --- node drag (pins + persists) and click (activate) on pointer events ---
   const onNodePointerDown =
@@ -300,7 +340,13 @@ export function ForceGraph({
         aria-label="Graph of projects. Use the sidebar to navigate."
         className="h-full w-full touch-none"
       >
-        <g ref={sceneRef} transform={zoomIdentity.scale(k).toString()}>
+        <g
+          ref={sceneRef}
+          transform={zoomIdentity
+            .translate(transform.x, transform.y)
+            .scale(transform.k)
+            .toString()}
+        >
           <g>
             {graph.edges.map((e) => {
               const s = pos(e.source)
