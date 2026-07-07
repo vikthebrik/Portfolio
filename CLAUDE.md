@@ -222,8 +222,11 @@ shows this pick; a manual choice overrides the render but not the chip.
   Figma Dev Mode (pull real design tokens for the design pillar). Skip Filesystem
   MCP — Claude Code has built-in file tools.
 
-## Custom skill to build
+## Custom skill: add-project (built)
 
-An `add-project` skill that knows this frontmatter schema and scaffolds a new
-MDX file + asset references + suggested `related` links in one command. This is
-the "adaptable" workflow made concrete.
+`/add-project` (`.claude/skills/add-project/SKILL.md`) is the "adaptable" workflow made
+concrete: it knows this frontmatter schema and scaffolds a new `content/projects/<slug>.mdx`
+in one command — gathers the fields, derives a unique slug, suggests `related` links from
+shared-tag overlap (biasing toward at least one cross-pillar edge), keeps media as external
+URLs (never committed), then validates via build and commits. Adding a project still touches
+exactly one file; the node and edges rebuild from frontmatter.
