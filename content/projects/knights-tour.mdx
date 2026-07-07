@@ -1,0 +1,35 @@
+---
+title: Knight's Tour Solver
+slug: knights-tour
+category: tech
+summary: Implementations and analysis of the Knight's Tour — Warnsdorff's heuristic, DFS backtracking, and a 3D generalization, with path visualizations across board sizes.
+tags: [algorithms, python, optimization, data-viz]
+related: [graph-query-engine, ml-fairness-audit]
+year: 2024
+links:
+  repo: https://github.com/vikthebrik/Knights_Tour
+---
+
+## Overview
+
+The Knight's Tour asks whether a knight can visit every square of a chessboard exactly
+once — an open tour ends anywhere, a closed tour returns to its start. This project collects
+several approaches to solving it, from a naive depth-first search to degree-based heuristics,
+alongside visualizations of the resulting paths.
+
+## Approach
+
+- **Warnsdorff's Rule** (`Warnsdoff.ipynb`) — a greedy heuristic that always steps to the
+  square with the fewest onward moves (minimum degree), with experiments comparing
+  tie-breaking strategies to keep the search from stalling.
+- **DFS + backtracking** (`simple.py`) — a brute-force baseline that explores paths and
+  backtracks at dead ends, bounds-checked for an 8×8 board.
+- **Universal framework** (`Universal.ipynb`) — the same heuristics generalized across board
+  sizes and shapes.
+- **3D extension** (`3D_general.ipynb`) — the tour lifted onto a three-dimensional board, with
+  new movement rules and the added combinatorial complexity that brings.
+
+A written guide (matrix overlays, degree heuristics, historical context) accompanies the code.
+
+{/* Imported from GitHub — this is a draft distilled from the repo README. Refine the prose
+and add a result/visualization once media is hosted. */}
