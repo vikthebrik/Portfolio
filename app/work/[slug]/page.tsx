@@ -42,7 +42,7 @@ export default async function CaseStudy({
           portfolio
         </Link>
         {' / '}
-        <Link href={`/?c=${project.category}`} className="hover:text-clay">
+        <Link href={`/?focus=${project.category}`} className="hover:text-clay">
           {project.category}
         </Link>
         {' / '}
@@ -114,7 +114,7 @@ export default async function CaseStudy({
 
       <div className="mt-12">
         <Link
-          href={`/?c=${project.category}`}
+          href={`/?focus=${project.category}`}
           className="text-sm text-clay hover:underline"
         >
           ← back to {project.category}

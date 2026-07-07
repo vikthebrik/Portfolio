@@ -61,7 +61,7 @@ export function Minimap() {
       if (s) {
         const first = graph.nodes[0]?.id
         const p = first ? s.positions[first] : undefined
-        const next = `${Math.round(s.transform.x)},${Math.round(s.transform.y)},${s.transform.k.toFixed(2)},${p ? Math.round(p.x) : 0},${p ? Math.round(p.y) : 0},${s.bounds.w}`
+        const next = `${Math.round(s.transform.x)},${Math.round(s.transform.y)},${s.transform.k.toFixed(2)},${p ? Math.round(p.x) : 0},${p ? Math.round(p.y) : 0},${s.bounds.w},${s.center ?? ''}`
         if (next !== sig) {
           sig = next
           setSnapshot({ ...s })
@@ -98,15 +98,32 @@ export function Minimap() {
     sim.tick(220)
     const positions: Positions = {}
     for (const n of nodes) positions[n.id] = { x: n.x ?? 0, y: n.y ?? 0 }
-    setSnapshot({ positions, bounds: { w: 600, h: 450 }, transform: { x: 0, y: 0, k: 1 } })
+    setSnapshot({
+      positions,
+      bounds: { w: 600, h: 450 },
+      transform: { x: 0, y: 0, k: 1 },
+      center: null, // detail pages highlight via `currentId`, not the snapshot center
+    })
   }, [onMainPage, pathname, graph])
 
   const fit = useMemo(() => makeFit(snapshot?.positions), [snapshot])
 
+  // Which node to emphasize: on the main graph, the re-rooted center (from the snapshot);
+  // on a detail page, the node whose case study is open.
+  const highlightId = onMainPage ? (snapshot?.center ?? null) : currentId
+
   const navigate = (n: GraphNode) => {
+    // On the main graph, clicking a node re-roots it in place (same as the big graph) —
+    // no page load. `about` is a real page, so it still routes.
+    if (onMainPage && bridge) {
+      if (n.type === 'about') router.push('/about')
+      else bridge.setCenter(n.type === 'root' ? null : n.id)
+      return
+    }
+    // On detail pages the minimap is the way around: navigate to traverse.
     if (n.type === 'project') router.push(n.url ?? `/work/${n.id}`)
     else if (n.type === 'about') router.push('/about')
-    else if (n.type === 'category') router.push(`/?c=${n.id}`)
+    else if (n.type === 'category') router.push(`/?focus=${n.id}`)
     else router.push('/')
   }
 
@@ -194,25 +211,37 @@ export function Minimap() {
                 const p = snapshot.positions[n.id]
                 if (!p) return null
                 const c = fit.map(p.x, p.y)
-                const isCurrent = n.id === currentId
+                const isCurrent = n.id === highlightId
                 const r = n.type === 'root' ? 3.5 : n.type === 'project' ? 2 : 3
                 return (
-                  <circle
-                    key={n.id}
-                    data-mini-node
-                    cx={c.x}
-                    cy={c.y}
-                    r={r}
-                    className={
-                      (isCurrent ? 'fill-clay' : 'fill-muted') + ' cursor-pointer'
-                    }
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      navigate(n)
-                    }}
-                  >
-                    <title>{n.label}</title>
-                  </circle>
+                  <g key={n.id}>
+                    {isCurrent && (
+                      <circle
+                        cx={c.x}
+                        cy={c.y}
+                        r={r + 2.5}
+                        fill="none"
+                        className="stroke-clay"
+                        strokeWidth={1}
+                        pointerEvents="none"
+                      />
+                    )}
+                    <circle
+                      data-mini-node
+                      cx={c.x}
+                      cy={c.y}
+                      r={r}
+                      className={
+                        (isCurrent ? 'fill-clay' : 'fill-muted') + ' cursor-pointer'
+                      }
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        navigate(n)
+                      }}
+                    >
+                      <title>{n.label}</title>
+                    </circle>
+                  </g>
                 )
               })}
             </g>

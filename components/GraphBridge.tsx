@@ -17,12 +17,17 @@ export type GraphSnapshot = {
   positions: Record<string, { x: number; y: number }>
   bounds: { w: number; h: number }
   transform: Transform
+  center: string | null // the re-rooted node (null = root/overview) → minimap rings it
 }
 
 type Bridge = {
   snapshotRef: React.MutableRefObject<GraphSnapshot | null>
   setPanHandler: (fn: ((t: Transform) => void) | null) => void
   pan: (t: Transform) => void
+  // Re-root channel: GraphExplorer registers its setCenter; the Minimap calls setCenter
+  // to re-root the main graph on a clicked node (null = overview).
+  setCenterHandler: (fn: ((id: string | null) => void) | null) => void
+  setCenter: (id: string | null) => void
 }
 
 const BridgeContext = createContext<Bridge | null>(null)
@@ -30,6 +35,7 @@ const BridgeContext = createContext<Bridge | null>(null)
 export function GraphBridgeProvider({ children }: { children: ReactNode }) {
   const snapshotRef = useRef<GraphSnapshot | null>(null)
   const panHandlerRef = useRef<((t: Transform) => void) | null>(null)
+  const centerHandlerRef = useRef<((id: string | null) => void) | null>(null)
 
   const bridge = useRef<Bridge>({
     snapshotRef,
@@ -37,6 +43,10 @@ export function GraphBridgeProvider({ children }: { children: ReactNode }) {
       panHandlerRef.current = fn
     },
     pan: (t) => panHandlerRef.current?.(t),
+    setCenterHandler: (fn) => {
+      centerHandlerRef.current = fn
+    },
+    setCenter: (id) => centerHandlerRef.current?.(id),
   }).current
 
   return <BridgeContext.Provider value={bridge}>{children}</BridgeContext.Provider>

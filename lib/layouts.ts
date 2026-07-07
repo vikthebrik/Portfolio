@@ -9,14 +9,16 @@ import {
   type SimulationNodeDatum,
 } from 'd3-force'
 import { CATEGORIES, type Category } from '@/lib/categories'
-import type { EdgeKind, Graph, GraphEdge, GraphNode } from '@/lib/graph'
+import { ROOT_ID, type EdgeKind, type Graph, type GraphEdge, type GraphNode } from '@/lib/graph'
 
 /**
  * Graph layouts. Each is expressed as a *reconfiguration of the simulation's forces*
  * (never static positions) so switching layouts just reheats — node objects and any
- * hand-drag pins (fx/fy) survive. Root is the one node a layout pins directly (it's
- * the center/anchor); ForceGraph re-applies saved drags afterwards so a hand-moved
- * root still wins. No new dependency — all d3-force. See CLAUDE.md "Layouts".
+ * hand-drag pins (fx/fy) survive. Exactly one node is pinned as the layout's anchor:
+ * the **center** (`ctx.centerId`, defaulting to `root`). Re-rooting on another node just
+ * pins it instead and rings everyone by graph-distance *from it* — same forces, new
+ * heart. ForceGraph re-applies saved drags afterwards so a hand-moved node still wins.
+ * No new dependency — all d3-force. See CLAUDE.md "Layouts" / "Navigation".
  */
 
 export type LayoutKind = 'web' | 'radial' | 'tree' | 'cluster'
@@ -68,16 +70,60 @@ export function chooseDefaultLayout(graph: Graph): LayoutKind {
   return 'cluster'
 }
 
-type Ctx = { w: number; h: number; edges: GraphEdge[] }
+type Ctx = { w: number; h: number; edges: GraphEdge[]; centerId?: string | null }
+
+// forceLink rewrites edge.source/target from ids to node objects once initialized, so
+// read an endpoint's id defensively whether it's still a string or already a node.
+const endpointId = (v: unknown): string =>
+  typeof v === 'object' && v ? (v as GraphNode).id : (v as string)
+
+/**
+ * BFS graph-distance from `startId`. This replaces the static `layer` (depth from root)
+ * whenever the graph is re-rooted on another node, so the rings/rows reform around the
+ * new center. When `startId` is the root, this equals `layer` — one code path, no
+ * special-case. Cheap at our node count. Falls back to `n.layer` for unreachable nodes.
+ */
+function bfsDistances(
+  nodes: SimNode[],
+  edges: GraphEdge[],
+  startId: string,
+): Map<string, number> {
+  const adj = new Map<string, string[]>()
+  for (const n of nodes) adj.set(n.id, [])
+  for (const e of edges) {
+    const s = endpointId(e.source)
+    const t = endpointId(e.target)
+    adj.get(s)?.push(t)
+    adj.get(t)?.push(s)
+  }
+  const dist = new Map<string, number>([[startId, 0]])
+  const queue = [startId]
+  while (queue.length) {
+    const id = queue.shift()!
+    const d = dist.get(id)!
+    for (const nb of adj.get(id) ?? []) {
+      if (dist.has(nb)) continue
+      dist.set(nb, d + 1)
+      queue.push(nb)
+    }
+  }
+  return dist
+}
 
 /** (Re)configure `sim`'s forces for the given layout. Call then `sim.alpha(x).restart()`. */
 export function applyLayout(
   sim: Simulation<SimNode, undefined>,
   kind: LayoutKind,
-  { w, h, edges }: Ctx,
+  { w, h, edges, centerId }: Ctx,
 ): void {
   const cx = w / 2
   const cy = h / 2
+
+  // Graph-distance from the center drives the rings/rows (falls back to `layer`). Compute
+  // BEFORE the link force is (re)installed, while edge endpoints are still plain ids.
+  const center = centerId ?? ROOT_ID
+  const dist = bfsDistances(sim.nodes(), edges, center)
+  const depthOf = (n: SimNode) => dist.get(n.id) ?? n.layer
 
   // Shared forces: links (per-kind distance; strength dialed down where a positional
   // force should dominate) and collision.
@@ -97,32 +143,38 @@ export function applyLayout(
   sim.force('x', null)
   sim.force('y', null)
 
-  // Root is pinned to the layout's anchor (top-center for tree, center otherwise).
-  const root = sim.nodes().find((n) => n.type === 'root')
-  const rootY = kind === 'tree' ? cy - ROW : cy
-  if (root) {
-    root.fx = cx
-    root.fy = rootY
+  // Release every node's layout pin, then pin only the center to the anchor (top-center
+  // for tree, center otherwise). Hand-drag pins are restored by the caller afterwards, so
+  // they still win; this only lets a *previous* center's pin go when the root changes.
+  for (const n of sim.nodes()) {
+    n.fx = null
+    n.fy = null
+  }
+  const anchorY = kind === 'tree' ? cy - ROW : cy
+  const centerNode = sim.nodes().find((n) => n.id === center)
+  if (centerNode) {
+    centerNode.fx = cx
+    centerNode.fy = anchorY
   }
 
   switch (kind) {
     case 'web':
-      // Centralized organic web: mild radial rings keep it centered on root, links
-      // still bend it into a mesh. (This is the fix for the old "chain" layout.)
+      // Centralized organic web: mild radial rings keep it centered on the center node,
+      // links still bend it into a mesh. (This is the fix for the old "chain" layout.)
       sim.force('charge', forceManyBody<SimNode>().strength(-420))
       sim.force(
         'radial',
-        forceRadial<SimNode>((n) => n.layer * RING, cx, cy).strength(0.18),
+        forceRadial<SimNode>((n) => depthOf(n) * RING, cx, cy).strength(0.18),
       )
       break
 
     case 'radial':
-      // Clean concentric rings by depth; charge spreads nodes *around* each ring so
-      // they don't pile on one side, while weak links let the radius dominate.
+      // Clean concentric rings by depth-from-center; charge spreads nodes *around* each
+      // ring so they don't pile on one side, while weak links let the radius dominate.
       sim.force('charge', forceManyBody<SimNode>().strength(-320))
       sim.force(
         'radial',
-        forceRadial<SimNode>((n) => n.layer * RING, cx, cy).strength(0.95),
+        forceRadial<SimNode>((n) => depthOf(n) * RING, cx, cy).strength(0.95),
       )
       break
 
@@ -142,10 +194,11 @@ export function applyLayout(
     }
 
     case 'tree':
-      // Rough top-down hierarchy: y by layer, mild charge spreads siblings in x, a
-      // weak x-pull keeps it centered. A force approximation, not a tidy tree.
+      // Rough top-down hierarchy rooted at the center: y by distance-from-center, mild
+      // charge spreads siblings in x, a weak x-pull keeps it centered. A force
+      // approximation, not a tidy tree.
       sim.force('charge', forceManyBody<SimNode>().strength(-260))
-      sim.force('y', forceY<SimNode>((n) => rootY + n.layer * ROW).strength(0.7))
+      sim.force('y', forceY<SimNode>((n) => anchorY + depthOf(n) * ROW).strength(0.7))
       sim.force('x', forceX<SimNode>(cx).strength(0.05))
       break
   }

@@ -8,20 +8,21 @@ import type { Graph, GraphNode } from '@/lib/graph'
  * Names-only file tree — the accessible, keyboard-navigable mirror of the graph and,
  * on mobile, the entire interface. A search box filters the tree (and highlights the
  * graph via the shared query); below it, a `portfolio` root, the four categories
- * (buttons that set soft focus), each category's projects (links by title, sorted by
- * `order`), and a "how it works" link.
+ * (buttons that re-root the graph on that hub), each category's projects (links by
+ * title, sorted by `order`), and a "how it works" link. `center` is the re-rooted node
+ * id (matches the graph); it highlights the current hub/project here too.
  */
 export function Sidebar({
   graph,
-  focus,
-  onFocus,
+  center,
+  onCenter,
   query,
   onQueryChange,
   activeSlug,
 }: {
   graph: Graph
-  focus: Category | null
-  onFocus: (category: Category | null) => void
+  center: string | null
+  onCenter: (id: string | null) => void
   query: string
   onQueryChange: (value: string) => void
   activeSlug?: string
@@ -57,9 +58,9 @@ export function Sidebar({
 
       <button
         type="button"
-        onClick={() => onFocus(null)}
-        aria-current={focus === null ? 'true' : undefined}
-        className={focus === null ? 'text-clay' : 'text-ink hover:text-clay'}
+        onClick={() => onCenter(null)}
+        aria-current={center === null ? 'true' : undefined}
+        className={center === null ? 'text-clay' : 'text-ink hover:text-clay'}
       >
         portfolio
       </button>
@@ -73,35 +74,37 @@ export function Sidebar({
             <li key={category} className="mt-1">
               <button
                 type="button"
-                onClick={() => onFocus(category)}
-                aria-current={focus === category ? 'true' : undefined}
+                onClick={() => onCenter(center === category ? null : category)}
+                aria-current={center === category ? 'true' : undefined}
                 className={
                   'pl-3 ' +
-                  (focus === category ? 'text-clay' : 'text-ink hover:text-clay')
+                  (center === category ? 'text-clay' : 'text-ink hover:text-clay')
                 }
               >
                 {category}
               </button>
 
               <ul>
-                {projects.map((project) => (
-                  <li key={project.id}>
-                    <Link
-                      href={project.url ?? `/work/${project.id}`}
-                      aria-current={
-                        project.id === activeSlug ? 'page' : undefined
-                      }
-                      className={
-                        'block pl-7 ' +
-                        (project.id === activeSlug
-                          ? 'text-clay'
-                          : 'text-muted hover:text-clay')
-                      }
-                    >
-                      {project.label}
-                    </Link>
-                  </li>
-                ))}
+                {projects.map((project) => {
+                  const active =
+                    project.id === activeSlug || project.id === center
+                  return (
+                    <li key={project.id}>
+                      <Link
+                        href={project.url ?? `/work/${project.id}`}
+                        aria-current={
+                          project.id === activeSlug ? 'page' : undefined
+                        }
+                        className={
+                          'block pl-7 ' +
+                          (active ? 'text-clay' : 'text-muted hover:text-clay')
+                        }
+                      >
+                        {project.label}
+                      </Link>
+                    </li>
+                  )
+                })}
               </ul>
             </li>
           )

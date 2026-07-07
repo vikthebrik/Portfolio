@@ -35,7 +35,7 @@ export function ForceGraph({
   layout,
   projectOpacity,
   folderOpacity,
-  activeFocus,
+  center,
   query,
   onActivateNode,
 }: {
@@ -43,7 +43,7 @@ export function ForceGraph({
   layout: LayoutKind
   projectOpacity: number // root/hubs are always on; only projects are dimmable
   folderOpacity: Record<Category, number>
-  activeFocus: string | null
+  center: string | null // the re-rooted node (null = root/overview): pinned + emphasized
   query: string // search — emphasize matching nodes, dim the rest
   onActivateNode: (node: GraphNode) => void
 }) {
@@ -55,8 +55,11 @@ export function ForceGraph({
   const sizeRef = useRef({ w: 800, h: 600 })
   const layoutRef = useRef(layout)
   layoutRef.current = layout
+  const centerRef = useRef(center)
+  centerRef.current = center
   const rafPending = useRef(false)
   const transformRef = useRef<Transform>({ x: 0, y: 0, k: 1 })
+  const zoomBehaviorRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null)
   const bridge = useGraphBridge()
 
   const [, setTick] = useState(0)
@@ -73,7 +76,44 @@ export function ForceGraph({
       positions,
       bounds: sizeRef.current,
       transform: transformRef.current,
+      center: centerRef.current,
     }
+  }
+
+  // Glide the camera so the (re-rooted) center node is framed at the viewport middle.
+  // The center is force-pinned to the pane center, so this mostly re-neutralizes any
+  // pan/zoom the user had. A short rAF tween drives d3-zoom's own transform (so its
+  // internal state stays in sync and the next gesture continues cleanly); zoom is held
+  // constant so an eased lerp of the translate is perfectly smooth. Reduced-motion jumps.
+  const flyToCenter = () => {
+    const svg = svgRef.current
+    const behavior = zoomBehaviorRef.current
+    if (!svg || !behavior) return
+    const cid = centerRef.current ?? ROOT_ID
+    const node = simNodesRef.current.find((n) => n.id === cid)
+    const { w, h } = sizeRef.current
+    const gx = node?.fx ?? node?.x ?? w / 2
+    const gy = node?.fy ?? node?.y ?? h / 2
+    const k = transformRef.current.k // keep the current zoom, just recenter
+    const from = transformRef.current
+    const to = { x: w / 2 - k * gx, y: h / 2 - k * gy }
+    const sel = select(svg)
+    const apply = (x: number, y: number) =>
+      sel.call(behavior.transform, zoomIdentity.translate(x, y).scale(k))
+
+    if (prefersReducedMotion()) {
+      apply(to.x, to.y)
+      return
+    }
+    const start = performance.now()
+    const dur = 500
+    const step = (now: number) => {
+      const p = Math.min((now - start) / dur, 1)
+      const e = p * (2 - p) // easeOutQuad
+      apply(from.x + (to.x - from.x) * e, from.y + (to.y - from.y) * e)
+      if (p < 1) requestAnimationFrame(step)
+    }
+    requestAnimationFrame(step)
   }
 
   // Live position lookup — rebuilt each render from the sim-owned node objects.
@@ -125,8 +165,8 @@ export function ForceGraph({
 
     const sim = forceSimulation(nodes)
     simRef.current = sim
-    applyLayout(sim, layoutRef.current, { w, h, edges })
-    reapplySavedPins(nodes) // hand-drags win over the layout's root pin
+    applyLayout(sim, layoutRef.current, { w, h, edges, centerId: centerRef.current })
+    reapplySavedPins(nodes) // hand-drags win over the layout's center pin
 
     const requestPaint = () => {
       if (rafPending.current) return
@@ -152,7 +192,12 @@ export function ForceGraph({
       const nw = wrap.clientWidth
       const nh = wrap.clientHeight
       sizeRef.current = { w: nw, h: nh }
-      applyLayout(sim, layoutRef.current, { w: nw, h: nh, edges })
+      applyLayout(sim, layoutRef.current, {
+        w: nw,
+        h: nh,
+        edges,
+        centerId: centerRef.current,
+      })
       reapplySavedPins(nodes)
       if (prefersReducedMotion()) {
         sim.tick(120)
@@ -178,7 +223,7 @@ export function ForceGraph({
     if (!sim) return
     const { w, h } = sizeRef.current
     const edges = graph.edges.map((e) => ({ ...e }))
-    applyLayout(sim, layout, { w, h, edges })
+    applyLayout(sim, layout, { w, h, edges, centerId: centerRef.current })
     reapplySavedPins(sim.nodes())
     if (prefersReducedMotion()) {
       sim.tick(300)
@@ -188,6 +233,26 @@ export function ForceGraph({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layout])
+
+  // Re-root on the selected node: same forces, new center. Reheat so the layout reforms
+  // around it, then glide the camera to frame it. The full web stays on screen — nothing
+  // is filtered (CLAUDE.md "one living web"); only the anchor + emphasis change.
+  useEffect(() => {
+    const sim = simRef.current
+    if (!sim) return
+    const { w, h } = sizeRef.current
+    const edges = graph.edges.map((e) => ({ ...e }))
+    applyLayout(sim, layoutRef.current, { w, h, edges, centerId: center })
+    reapplySavedPins(sim.nodes())
+    if (prefersReducedMotion()) {
+      sim.tick(300)
+      setTick((t) => t + 1)
+    } else {
+      sim.alpha(0.7).restart()
+    }
+    flyToCenter()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [center])
 
   // Pan/zoom on the svg; ignore events that start on a node so drag still works. The
   // full transform (translate + scale) is applied to the scene and published so the
@@ -214,6 +279,7 @@ export function ForceGraph({
         setTransform(t)
         publish()
       })
+    zoomBehaviorRef.current = behavior
     const sel = select(svg)
     sel.call(behavior)
 
@@ -276,14 +342,14 @@ export function ForceGraph({
       window.addEventListener('pointerup', up)
     }
 
-  // --- emphasis: hover (transient) overrides soft focus (a category) ---
-  const focusSet = useMemo(() => {
-    if (!activeFocus) return null
-    const s = new Set<string>([activeFocus, ROOT_ID])
-    for (const n of graph.nodes)
-      if (n.type === 'project' && n.category === activeFocus) s.add(n.id)
-    return s
-  }, [graph, activeFocus])
+  // --- emphasis: hover (transient) overrides the re-rooted center's ego network ---
+  // When centered on a node, emphasize it + its direct neighbors (its cluster) and fade
+  // the rest. For a category hub this is {hub, root, its projects} — the old soft-focus
+  // set — so hub behavior is unchanged; a project center emphasizes its own neighborhood.
+  const centerSet = useMemo(() => {
+    if (!center || center === ROOT_ID) return null
+    return new Set<string>([center, ...(adjacency.get(center) ?? [])])
+  }, [center, adjacency])
 
   // Search set — nodes whose title or tags match the query. Emphasized like a persistent
   // multi-node hover.
@@ -299,11 +365,11 @@ export function ForceGraph({
     return s
   }, [graph, query])
 
-  // Precedence: hover (transient) > search > soft-focus.
+  // Precedence: hover (transient) > search > re-rooted center.
   const activeSet = hovered
     ? new Set<string>([hovered, ...(adjacency.get(hovered) ?? [])])
-    : (searchSet ?? focusSet)
-  const focal = hovered ?? activeFocus
+    : (searchSet ?? centerSet)
+  const focal = hovered ?? (center && center !== ROOT_ID ? center : null)
   const isMatch = (id: string) => searchSet?.has(id) ?? false
 
   const isOn = (id: string) => !activeSet || activeSet.has(id)
