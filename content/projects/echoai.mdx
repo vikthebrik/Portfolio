@@ -1,0 +1,35 @@
+---
+title: EchoAI — Counterpoint Reading Extension
+slug: echoai
+category: tech
+summary: A Chrome side-panel extension that analyzes any article and generates a neutral summary, an opposing viewpoint, a bias score, and alternative readings — built at QuackHacks 2025 to push readers past echo chambers.
+tags: [browser-extension, ai, nlp, data-viz]
+related: [ml-fairness-audit]
+year: 2025
+links:
+  repo: https://github.com/vikthebrik/quackhacks2025
+---
+
+## Overview
+
+EchoAI helps readers escape echo chambers. Viewing any article, it produces a neutral/factual
+summary, an opposing-viewpoint summary, a bias-spectrum score, and recommendations for
+alternative perspectives — all inside a clean Chrome side panel that stays consistent across
+sites. Built at the University of Oregon's Fall 2025 QuackHacks hackathon.
+
+## How it works
+
+A content script extracts the page text; a background worker sends it to Google Gemini for
+summarization, bias detection, and counter-viewpoint generation; the side panel renders a
+bias bar, the summaries, and alternative-article suggestions (fetched via `<topic> opposing
+viewpoint` search queries).
+
+To keep the AI affordable, EchoAI preprocesses locally — chunking, caching, and keyword
+filtering before any tokens are spent.
+
+## Team
+
+Built with Madeline Luu and Rayna Patel.
+
+{/* Imported from GitHub — draft distilled from the repo README. Refine and add a screenshot
+of the sidebar once media is hosted (external URL only; never commit the image). */}
