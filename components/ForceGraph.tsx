@@ -35,6 +35,7 @@ export function ForceGraph({
   projectOpacity,
   folderOpacity,
   activeFocus,
+  query,
   onActivateNode,
 }: {
   graph: Graph
@@ -42,6 +43,7 @@ export function ForceGraph({
   projectOpacity: number // root/hubs are always on; only projects are dimmable
   folderOpacity: Record<Category, number>
   activeFocus: string | null
+  query: string // search — emphasize matching nodes, dim the rest
   onActivateNode: (node: GraphNode) => void
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -243,10 +245,26 @@ export function ForceGraph({
     return s
   }, [graph, activeFocus])
 
+  // Search set — nodes whose title or tags match the query. Emphasized like a persistent
+  // multi-node hover.
+  const searchSet = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return null
+    const s = new Set<string>()
+    for (const n of graph.nodes) {
+      const inLabel = n.label.toLowerCase().includes(q)
+      const inTags = n.tags?.some((t) => t.toLowerCase().includes(q)) ?? false
+      if (inLabel || inTags) s.add(n.id)
+    }
+    return s
+  }, [graph, query])
+
+  // Precedence: hover (transient) > search > soft-focus.
   const activeSet = hovered
     ? new Set<string>([hovered, ...(adjacency.get(hovered) ?? [])])
-    : focusSet
+    : (searchSet ?? focusSet)
   const focal = hovered ?? activeFocus
+  const isMatch = (id: string) => searchSet?.has(id) ?? false
 
   const isOn = (id: string) => !activeSet || activeSet.has(id)
   const pos = (id: string) => byId.get(id)
@@ -270,7 +288,7 @@ export function ForceGraph({
     if (n.type !== 'project') return 1
     if (!isOn(n.id)) return 0
     const base = baseOpacity(n)
-    if (n.pinned || hovered === n.id) return base
+    if (n.pinned || hovered === n.id || isMatch(n.id)) return base
     return base * clamp((k - 0.7) / 0.8, 0, 1)
   }
 

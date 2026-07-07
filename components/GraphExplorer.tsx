@@ -46,6 +46,7 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
   const router = useRouter()
   const [focus, setFocusState] = useState<Category | null>(null)
   const [view, setView] = useState<ViewState>(defaultView)
+  const [query, setQuery] = useState('')
   const [remountKey, setRemountKey] = useState(0)
   const loaded = useRef(false)
 
@@ -119,7 +120,13 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
         <p className="mb-3 text-xs uppercase tracking-wide text-faint">
           {focus ? `focus · ${focus}` : 'overview'}
         </p>
-        <Sidebar graph={graph} focus={focus} onFocus={setFocus} />
+        <Sidebar
+          graph={graph}
+          focus={focus}
+          onFocus={setFocus}
+          query={query}
+          onQueryChange={setQuery}
+        />
       </aside>
 
       <main className="relative hidden flex-1 md:block">
@@ -147,6 +154,7 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
           projectOpacity={view.projectOpacity}
           folderOpacity={view.folderOpacity}
           activeFocus={focus}
+          query={query}
           onActivateNode={activateNode}
         />
       </main>

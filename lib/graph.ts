@@ -24,6 +24,7 @@ export type GraphNode = {
   url?: string
   featured: boolean
   pinned: boolean // force-show (manual override)
+  tags?: readonly string[] // project tags — feeds search matching
   order?: number // manual sort within a category
   degree: number // populated after edges are built; drives node size
   layer: number // BFS depth from root (0 root, 1 hubs+about, 2 projects); drives layout rings + per-layer opacity
@@ -106,6 +107,7 @@ export function buildGraph(): Graph {
       url: p.url,
       featured: p.featured,
       pinned: p.pinned,
+      tags: p.tags,
       order: p.order,
       degree: 0,
       layer: 2,
