@@ -55,17 +55,15 @@ export function Minimap() {
       return
     }
     let raf = 0
-    let sig = ''
+    let sig = -1
     const loop = () => {
       const s = bridge.snapshotRef.current
-      if (s) {
-        const first = graph.nodes[0]?.id
-        const p = first ? s.positions[first] : undefined
-        const next = `${Math.round(s.transform.x)},${Math.round(s.transform.y)},${s.transform.k.toFixed(2)},${p ? Math.round(p.x) : 0},${p ? Math.round(p.y) : 0},${s.bounds.w},${s.center ?? ''}`
-        if (next !== sig) {
-          sig = next
-          setSnapshot({ ...s })
-        }
+      // The publisher bumps `version` on every tick/zoom; comparing it (not a sampled
+      // position) is what keeps the minimap live through the whole settle instead of
+      // freezing once the root node — which pins early — stops moving.
+      if (s && s.version !== sig) {
+        sig = s.version
+        setSnapshot({ ...s })
       }
       raf = requestAnimationFrame(loop)
     }
@@ -103,6 +101,7 @@ export function Minimap() {
       bounds: { w: 600, h: 450 },
       transform: { x: 0, y: 0, k: 1 },
       center: null, // detail pages highlight via `currentId`, not the snapshot center
+      version: 0, // static headless layout — no live updates to signal
     })
   }, [onMainPage, pathname, graph])
 
@@ -301,7 +300,14 @@ function viewportRect(snapshot: GraphSnapshot, fit: Fit) {
   const g1 = { x: (bounds.w - t.x) / t.k, y: (bounds.h - t.y) / t.k }
   const a = fit.map(g0.x, g0.y)
   const b = fit.map(g1.x, g1.y)
-  return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y }
+  // The map is fit to the node cloud, but the visible region can extend past it (empty
+  // margins around the graph). Clamp the box to the map frame so it reads as "the part of
+  // the graph you're looking at" rather than overflowing the panel.
+  const x0 = Math.max(0, Math.min(a.x, W))
+  const y0 = Math.max(0, Math.min(a.y, H))
+  const x1 = Math.max(0, Math.min(b.x, W))
+  const y1 = Math.max(0, Math.min(b.y, H))
+  return { x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) }
 }
 
 function readPins(): Positions {

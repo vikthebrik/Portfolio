@@ -60,6 +60,7 @@ export function ForceGraph({
   const rafPending = useRef(false)
   const transformRef = useRef<Transform>({ x: 0, y: 0, k: 1 })
   const zoomBehaviorRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null)
+  const publishVersion = useRef(0)
   const bridge = useGraphBridge()
 
   const [, setTick] = useState(0)
@@ -77,6 +78,7 @@ export function ForceGraph({
       bounds: sizeRef.current,
       transform: transformRef.current,
       center: centerRef.current,
+      version: ++publishVersion.current, // monotonic — the minimap's change signal
     }
   }
 

@@ -18,6 +18,7 @@ export type GraphSnapshot = {
   bounds: { w: number; h: number }
   transform: Transform
   center: string | null // the re-rooted node (null = root/overview) → minimap rings it
+  version: number // bumped on every publish — the minimap's change signal (see Minimap)
 }
 
 type Bridge = {
