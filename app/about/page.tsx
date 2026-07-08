@@ -61,7 +61,8 @@ export default function About() {
           </p>
           <p className="mt-2">
             Prefer a keyboard? The sidebar is a fully keyboard-navigable tree with
-            search. And if you live in a terminal, press{' '}
+            search, and the graph itself is too — Tab to a node, arrows walk the
+            edges, Enter re-roots. And if you live in a terminal, press{' '}
             <code className="bg-surface px-1 py-0.5 text-[0.85em] text-ink">
               ctrl+`
             </code>{' '}

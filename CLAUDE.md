@@ -156,6 +156,11 @@ One always-visible web; navigation is emphasis + routing, not subgraph filtering
 - **search** — the sidebar search box matches project title/tags: the graph emphasizes
   matches (dims the rest, same mechanism as hover/re-root) and the sidebar tree filters to
   matches. Transient, not persisted.
+- **keyboard traversal** — the graph is directly keyboard-navigable: roving tabindex (the
+  centered node is the single tabstop), **arrows walk edges** to the neighbor whose
+  direction best matches the key (cosine against the edge vector), Enter/Space activates
+  (same as click). Focus doubles as hover — the emphasis machinery lights the cluster —
+  plus a clay focus ring. The sidebar tree remains the linear accessible path.
 - **minimap** — a persistent panel bottom-right (`components/Minimap.tsx`, mounted in
   `app/layout.tsx`). On the main graph it mirrors the live layout, **rings the current
   center** (from the bridge snapshot), draws a draggable **viewport box** that pans the big

@@ -75,6 +75,7 @@ export function ForceGraph({
   const [transform, setTransform] = useState<Transform>({ x: 0, y: 0, k: 1 })
   const k = transform.k // zoom scale → drives label fade
   const [hovered, setHovered] = useState<string | null>(null)
+  const [kbFocus, setKbFocus] = useState<string | null>(null) // keyboard cursor → focus ring
 
   // Publish a live snapshot to the bridge (for the minimap). Cheap: writes a ref.
   const publish = () => {
@@ -387,6 +388,53 @@ export function ForceGraph({
       window.addEventListener('pointerup', up)
     }
 
+  // --- keyboard traversal: arrows walk edges, Enter activates (same as click) ------
+  // Roving tabindex — the centered node is the graph's single tabstop; arrows move real
+  // DOM focus to the neighbor whose direction best matches the pressed key (cosine
+  // against the edge vector). Focus doubles as hover, so the emphasis machinery and
+  // label force-show come for free.
+  const ARROW_DIRS: Record<string, { x: number; y: number }> = {
+    ArrowUp: { x: 0, y: -1 },
+    ArrowDown: { x: 0, y: 1 },
+    ArrowLeft: { x: -1, y: 0 },
+    ArrowRight: { x: 1, y: 0 },
+  }
+
+  const focusNode = (id: string) => {
+    svgRef.current
+      ?.querySelector<SVGGElement>(`[data-node-id="${CSS.escape(id)}"]`)
+      ?.focus()
+  }
+
+  const onNodeKeyDown = (node: SimNode) => (e: React.KeyboardEvent<SVGGElement>) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      onActivateNode(node)
+      return
+    }
+    const dir = ARROW_DIRS[e.key]
+    if (!dir) return
+    e.preventDefault()
+    const from = pos(node.id)
+    if (!from) return
+    let best: string | null = null
+    let bestScore = 0.05 // must be at least roughly in the pressed direction
+    for (const nb of adjacency.get(node.id) ?? []) {
+      const to = pos(nb)
+      if (!to) continue
+      const dx = (to.x ?? 0) - (from.x ?? 0)
+      const dy = (to.y ?? 0) - (from.y ?? 0)
+      const len = Math.hypot(dx, dy)
+      if (len === 0) continue
+      const score = (dx * dir.x + dy * dir.y) / len
+      if (score > bestScore) {
+        bestScore = score
+        best = nb
+      }
+    }
+    if (best) focusNode(best)
+  }
+
   // --- emphasis: hover (transient) overrides the re-rooted center's ego network ---
   // When centered on a node, emphasize it + its direct neighbors (its cluster) and fade
   // the rest. For a category hub this is {hub, root, its projects} — the old soft-focus
@@ -541,14 +589,29 @@ export function ForceGraph({
                 <g
                   key={n.id}
                   data-node
+                  data-node-id={n.id}
                   transform={`translate(${p?.x ?? 0},${p?.y ?? 0})`}
-                  className="cursor-pointer"
+                  className="cursor-pointer outline-none"
                   style={{ opacity: nodeOpacity(n) }}
                   onPointerDown={onNodePointerDown(n as SimNode)}
                   onPointerEnter={() => setHovered(n.id)}
                   onPointerLeave={() => setHovered((h) => (h === n.id ? null : h))}
+                  role="button"
                   aria-label={n.label}
+                  tabIndex={n.id === (center ?? ROOT_ID) ? 0 : -1}
+                  onKeyDown={onNodeKeyDown(n as SimNode)}
+                  onFocus={() => {
+                    setKbFocus(n.id)
+                    setHovered(n.id) // focus = hover: light up the connections
+                  }}
+                  onBlur={() => {
+                    setKbFocus((f) => (f === n.id ? null : f))
+                    setHovered((h) => (h === n.id ? null : h))
+                  }}
                 >
+                  {kbFocus === n.id && (
+                    <circle r={r + 4} fill="none" strokeWidth={1.5} className="stroke-clay" />
+                  )}
                   <circle r={r} className={fill} />
                   <text
                     y={r + 11}

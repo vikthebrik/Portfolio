@@ -28,6 +28,23 @@ test.describe('the graph', () => {
     await expect(page).not.toHaveURL(/focus=/)
   })
 
+  test('arrow keys walk the edges; Enter activates', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('[data-node][aria-label="portfolio"]').focus()
+    await page.keyboard.press('ArrowRight')
+
+    // Focus moved to one of root's direct neighbors (a hub or how-it-works).
+    const focused = page.locator('[data-node]:focus')
+    await expect(focused).toHaveAttribute(
+      'aria-label',
+      /^(tech|design|drone|research|how it works)$/
+    )
+
+    // Enter = click: a hub re-roots (?focus=), how-it-works routes to /about.
+    await page.keyboard.press('Enter')
+    await expect(page).toHaveURL(/(\?focus=|\/about)/)
+  })
+
   test('clicking the centered project opens its case study', async ({ page }) => {
     await page.goto('/?focus=mcc-scheduler')
     await page.locator('[data-node][aria-label="MCC Scheduler"]').click()
