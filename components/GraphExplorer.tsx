@@ -153,8 +153,9 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
           query={query}
           onQueryChange={setQuery}
         />
-        {/* Contact footer — quiet, names-only, same restraint as the tree. */}
-        <footer className="mt-auto flex flex-wrap gap-x-4 gap-y-1 border-t border-line pt-4 font-mono text-xs">
+        {/* Contact footer — quiet, names-only, same restraint as the tree.
+            Bottom padding clears the fixed `>_ terminal` tab (desktop only). */}
+        <footer className="mt-auto flex flex-wrap gap-x-4 gap-y-1 border-t border-line pt-4 font-mono text-xs md:pb-10">
           {LINKS.map((l) => (
             <a
               key={l.label}
