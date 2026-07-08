@@ -22,6 +22,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # typecheck needs the typed content layer (`#site/content` → .velite/),
+      # which doesn't exist on a fresh clone until Velite runs.
+      - name: Build content layer
+        run: npx velite
+
       - name: Typecheck
         run: npm run typecheck
 
