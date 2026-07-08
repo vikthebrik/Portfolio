@@ -14,9 +14,15 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
+  // Absolute base for OG/twitter image URLs. On Vercel the production domain is
+  // injected; locally it falls back to localhost so previews still resolve.
+  metadataBase: process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? new URL(`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`)
+    : new URL('http://localhost:3000'),
   title: 'Portfolio — explorable work graph',
   description:
     'A CS/DSCI portfolio presented as a navigable force-directed network of projects.',
+  twitter: { card: 'summary_large_image' },
 }
 
 export default function RootLayout({
