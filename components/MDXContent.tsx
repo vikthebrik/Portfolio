@@ -54,5 +54,6 @@ const components: Record<string, ComponentType<Record<string, unknown>>> = {
 
 export function MDXContent({ code }: { code: string }) {
   const Component = useMDXComponent(code)
+  // eslint-disable-next-line react-hooks/static-components -- the component is derived from compiled MDX `code`; it can't exist at module scope
   return <Component components={components} />
 }

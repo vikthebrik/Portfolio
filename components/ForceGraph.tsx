@@ -244,6 +244,7 @@ export function ForceGraph({
       ro.disconnect()
       sim.stop()
       sim.on('tick', null)
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- counter ref, not a DOM ref; bumping the live value is the point
       glideToken.current++ // cancel in-flight glides — their targets just unmounted
       if (bridge) bridge.snapshotRef.current = null // stale once the main graph unmounts
     }
@@ -436,7 +437,6 @@ export function ForceGraph({
       }
     }
     return dist
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hovered, focal, searchSet, adjacency])
 
   const dimFactor = (id: string) => {

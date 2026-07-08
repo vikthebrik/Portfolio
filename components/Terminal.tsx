@@ -43,7 +43,7 @@ export function Terminal() {
   const [lines, setLines] = useState<Line[]>([])
   const [input, setInput] = useState('')
   const [history, setHistory] = useState<string[]>([])
-  const [histIdx, setHistIdx] = useState(-1)
+  const histIdx = useRef(-1)
   const inputRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const nextId = useRef(0)
@@ -137,7 +137,7 @@ export function Terminal() {
     print('cmd', `${prompt(cwd)} ${raw}`)
     if (!text) return
     setHistory((h) => (h[h.length - 1] === text ? h : [...h, text]))
-    setHistIdx(-1)
+    histIdx.current = -1
 
     const [cmd, ...args] = text.split(/\s+/)
     const arg = args.join(' ')
@@ -362,18 +362,16 @@ export function Terminal() {
       complete()
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
-      setHistIdx((i) => {
-        const next = i === -1 ? history.length - 1 : Math.max(i - 1, 0)
-        setInput(history[next] ?? '')
-        return next
-      })
+      const i = histIdx.current
+      const next = i === -1 ? history.length - 1 : Math.max(i - 1, 0)
+      histIdx.current = next
+      setInput(history[next] ?? '')
     } else if (e.key === 'ArrowDown') {
       e.preventDefault()
-      setHistIdx((i) => {
-        const next = i === -1 ? -1 : i + 1
-        setInput(next >= history.length ? '' : (history[next] ?? ''))
-        return next >= history.length ? -1 : next
-      })
+      const i = histIdx.current
+      const next = i === -1 ? -1 : i + 1
+      histIdx.current = next >= history.length ? -1 : next
+      setInput(next >= history.length ? '' : (history[next] ?? ''))
     } else if (e.key === 'Escape') {
       setOpen(false)
     }
