@@ -41,6 +41,12 @@ High-res images and video do **not** go in this repo or `public/`.
   URL in frontmatter `video`. Don't commit raw MP4s.
 - Only tiny inline diagrams (<200KB) may sit beside the MDX.
 
+To upload: `npm run media:upload -- <file-or-dir> [--prefix <folder>]` (needs
+`BLOB_READ_WRITE_TOKEN` in `.env`). It prints each file's Blob URL plus a
+ready-to-paste `<Figure>` snippet with the true aspect ratio. In MDX bodies use
+`<Figure>` / `<Gallery>` (see `components/mdx/`) for images and PDF previews —
+for a PDF, show a preview image and pass the PDF's URL as `href`.
+
 ## Getting started
 
 ```bash
