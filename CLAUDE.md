@@ -184,6 +184,18 @@ shell-local and `open` navigates. The FS derives from `#site/content` — adding
 automatically adds its file here too. Desktop-only (hidden on mobile); the panel uses
 `inert` when closed so it stays mounted (slide transition) without trapping focus.
 
+## Command palette (⌘K)
+
+`components/CommandPalette.tsx`, mounted once in `app/layout.tsx` like the terminal and
+minimap. **Pure acceleration, navigation only** — everything it reaches exists elsewhere:
+projects (open case study), hubs + overview (re-root: through the GraphBridge center
+channel when the main graph is on screen, `?focus=` deep link otherwise), how-it-works,
+the `lib/links.ts` contact links, and a terminal toggle (via the
+`portfolio:toggle-terminal` window event — the palette and terminal don't import each
+other's state). Hand-rolled (no `cmdk` dep); token-AND substring filter over
+label+tags+category; grouped results (`work` / `go to` / `links` / `commands`). Items
+derive from `#site/content` + `CATEGORIES` + `LINKS` — adding a project adds its entry.
+
 ## Manual control (override the auto-derivation)
 
 Auto-derivation is the default; these let a human override it:
