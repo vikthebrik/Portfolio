@@ -445,6 +445,16 @@ export function ForceGraph({
     return Math.max(0.05, Math.pow(1 - focusDim, rings))
   }
 
+  // Emphasis is a *boost*, not just an exemption from dimming: the focused cluster's
+  // nodes lift to near-full opacity so a centered category's projects are readable
+  // regardless of where the projects/folder sliders sit.
+  const emphasized = (id: string) => (activeSet?.has(id) ?? false)
+  const nodeOpacity = (n: GraphNode) => {
+    const base = baseOpacity(n)
+    if (!activeSet) return base
+    return emphasized(n.id) ? Math.max(base, 0.95) : base * dimFactor(n.id)
+  }
+
   // Base opacity: root/hubs/about are always on (1); only projects are dimmable, by the
   // projects slider × their folder slider. Folder opacity thus dims a category's
   // projects, never its hub.
@@ -460,12 +470,12 @@ export function ForceGraph({
 
   const labelOpacity = (n: GraphNode) => {
     // Structural nodes are always labelled; project labels fade with zoom unless
-    // pinned/hovered. Emphasis dimming applies via the group's opacity (dimFactor),
-    // so off-cluster labels fade with their node instead of vanishing outright.
+    // pinned/hovered/emphasized. Emphasis dimming applies via the group's opacity
+    // (dimFactor), so off-cluster labels fade with their node instead of vanishing.
     if (n.type !== 'project') return 1
-    const base = baseOpacity(n)
-    if (n.pinned || hovered === n.id || isMatch(n.id)) return base
-    return base * clamp((k - 0.7) / 0.8, 0, 1)
+    // The focused cluster reads like a table of contents: labels fully on.
+    if (n.pinned || hovered === n.id || isMatch(n.id) || emphasized(n.id)) return 1
+    return baseOpacity(n) * clamp((k - 0.7) / 0.8, 0, 1)
   }
 
   return (
@@ -492,20 +502,20 @@ export function ForceGraph({
               const touchesFocal =
                 focal != null && (e.source === focal || e.target === focal)
               const eBase = Math.min(baseOf(e.source), baseOf(e.target))
-              const emphasis = activeSet
+              // On-cluster edges lift with their nodes (the emphasis boost ignores the
+              // muted base); off-cluster edges dim by the endpoints' ring distance.
+              const opacity = activeSet
                 ? on
                   ? 0.9
-                  : 0.75 * Math.min(dimFactor(e.source), dimFactor(e.target))
-                : e.kind === 'tag'
-                  ? 0.5
-                  : 0.8
+                  : 0.75 * Math.min(dimFactor(e.source), dimFactor(e.target)) * eBase
+                : (e.kind === 'tag' ? 0.5 : 0.8) * eBase
               return (
                 <path
                   key={`${e.source}::${e.target}:${e.kind}`}
                   d={curve(s.x ?? 0, s.y ?? 0, t?.x ?? 0, t?.y ?? 0)}
                   fill="none"
                   className={touchesFocal && on ? 'stroke-clay' : 'stroke-line'}
-                  style={{ strokeWidth: STROKE_WIDTH[e.kind], opacity: emphasis * eBase }}
+                  style={{ strokeWidth: STROKE_WIDTH[e.kind], opacity }}
                 />
               )
             })}
@@ -516,7 +526,6 @@ export function ForceGraph({
               const p = pos(n.id)
               const isFocal = n.id === focal
               const r = nodeRadius(n)
-              const base = baseOpacity(n)
               const fill = isFocal
                 ? 'fill-clay'
                 : n.type === 'project'
@@ -534,7 +543,7 @@ export function ForceGraph({
                   data-node
                   transform={`translate(${p?.x ?? 0},${p?.y ?? 0})`}
                   className="cursor-pointer"
-                  style={{ opacity: base * dimFactor(n.id) }}
+                  style={{ opacity: nodeOpacity(n) }}
                   onPointerDown={onNodePointerDown(n as SimNode)}
                   onPointerEnter={() => setHovered(n.id)}
                   onPointerLeave={() => setHovered((h) => (h === n.id ? null : h))}
