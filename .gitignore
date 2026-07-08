@@ -27,3 +27,7 @@ npm-debug.log*
 # diagram PNGs beside MDX in content/ must stay tracked, see CLAUDE.md media strategy)
 .playwright-mcp/
 /*.png
+
+# raw media staged for Blob upload — never committed (CLAUDE.md media strategy)
+/*.zip
+/*.pdf
