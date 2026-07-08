@@ -1,9 +1,10 @@
 import type { NextConfig } from 'next'
 
 /**
- * Velite runs the content pipeline from here so a single `next dev` / `next build`
- * also (re)builds the typed content layer in `.velite`. In dev it watches; in build
- * it does one clean pass. Guarded so it only fires once per process.
+ * Velite runs the content pipeline from here so `next dev` also rebuilds the typed
+ * content layer in `.velite` (watch mode). For production builds this hook is racy
+ * (fired async, un-awaited — a fresh clone can compile before content exists), so
+ * `npm run build` runs `velite --clean` first and sets VELITE_STARTED=1 to skip it.
  * (Official Turbopack-compatible pattern — see Velite "with Next.js" docs.)
  */
 const isDev = process.argv.includes('dev')

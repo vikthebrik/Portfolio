@@ -22,12 +22,15 @@ const EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg', '.
 /** Minimal .env parse — only to find the Blob token; no dependency on dotenv. */
 async function loadToken() {
   if (process.env.BLOB_READ_WRITE_TOKEN) return process.env.BLOB_READ_WRITE_TOKEN
-  try {
-    const env = await readFile(new URL('../.env', import.meta.url), 'utf8')
-    const line = env.split('\n').find((l) => l.startsWith('BLOB_READ_WRITE_TOKEN='))
-    if (line) return line.slice(line.indexOf('=') + 1).trim().replace(/^["']|["']$/g, '')
-  } catch {
-    /* no .env — fall through to the error below */
+  // .env.local is where `vercel env pull` writes; .env is the hand-maintained one.
+  for (const file of ['../.env', '../.env.local']) {
+    try {
+      const env = await readFile(new URL(file, import.meta.url), 'utf8')
+      const line = env.split('\n').find((l) => l.startsWith('BLOB_READ_WRITE_TOKEN='))
+      if (line) return line.slice(line.indexOf('=') + 1).trim().replace(/^["']|["']$/g, '')
+    } catch {
+      /* file absent — try the next one */
+    }
   }
   return null
 }
