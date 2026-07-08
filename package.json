@@ -7,8 +7,9 @@
     "dev": "next dev",
     "build": "velite --clean && VELITE_STARTED=1 next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test",
     "media:upload": "node scripts/upload-media.mjs"
   },
   "dependencies": {
@@ -18,7 +19,7 @@
     "velite": "0.3.1"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3",
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "4.3.1",
     "@types/d3-force": "3.0.10",
     "@types/d3-selection": "3.0.11",

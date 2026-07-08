@@ -253,8 +253,16 @@ shows this pick; a manual choice overrides the render but not the chip.
   imports the categories from `lib/categories.ts`, so there is still one source of truth.
 - Conventional commits. Public repo — treat the repo itself as a portfolio piece
   (clean structure, strong README).
-- CI (GitHub Actions): lint, typecheck, build, Lighthouse budget, Playwright
-  visual-regression on the graph.
+- CI (`.github/workflows/ci.yml`): lint → typecheck → build → Playwright smoke tests.
+  `npm run lint` is `eslint . --max-warnings 0` (Next 16 removed `next lint`; flat config
+  imports `eslint-config-next`'s native flat presets). The React-Compiler-backed hook
+  rules (`react-hooks/refs`/`purity`/`immutability`/`set-state-in-effect`) are scoped
+  **off for the four graph components only** — their imperative d3 architecture is
+  deliberate; keep the rules on everywhere else. Tests (`tests/e2e/graph.spec.ts`) run
+  against the production build (`npm run build` first, then `npm run test:e2e`) with
+  reduced motion so the graph is deterministic — smoke assertions on structure and
+  behavior, not pixel diffs (the force layout isn't pixel-stable). Lighthouse budget
+  still deferred.
 
 ## Tool division of labor
 

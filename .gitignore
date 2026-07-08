@@ -31,3 +31,7 @@ npm-debug.log*
 # raw media staged for Blob upload — never committed (CLAUDE.md media strategy)
 /*.zip
 /*.pdf
+
+# playwright test output
+/test-results/
+/playwright-report/
