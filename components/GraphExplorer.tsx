@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { CATEGORIES, type Category } from '@/lib/categories'
 import { ROOT_ID, type Graph, type GraphNode } from '@/lib/graph'
+import { LINKS } from '@/lib/links'
 import { chooseDefaultLayout, type LayoutKind } from '@/lib/layouts'
 import { ForceGraph, POSITIONS_KEY } from './ForceGraph'
 import { useGraphBridge } from './GraphBridge'
@@ -141,7 +142,7 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
 
   return (
     <div className="flex h-[100dvh] flex-col md:flex-row">
-      <aside className="shrink-0 overflow-auto border-line p-5 md:w-72 md:border-r md:bg-surface/40">
+      <aside className="flex shrink-0 flex-col overflow-auto border-line p-5 md:w-72 md:border-r md:bg-surface/40">
         <p className="mb-3 text-xs uppercase tracking-wide text-faint">
           {centerNode ? `rooted · ${centerNode.label}` : 'overview'}
         </p>
@@ -152,6 +153,20 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
           query={query}
           onQueryChange={setQuery}
         />
+        {/* Contact footer — quiet, names-only, same restraint as the tree. */}
+        <footer className="mt-auto flex flex-wrap gap-x-4 gap-y-1 border-t border-line pt-4 font-mono text-xs">
+          {LINKS.map((l) => (
+            <a
+              key={l.label}
+              href={l.href}
+              target={l.href.startsWith('mailto:') ? undefined : '_blank'}
+              rel="noreferrer noopener"
+              className="text-faint hover:text-clay"
+            >
+              {l.label}
+            </a>
+          ))}
+        </footer>
       </aside>
 
       <main className="relative hidden flex-1 md:block">

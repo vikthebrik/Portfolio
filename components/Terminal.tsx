@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { projects } from '#site/content'
 import { CATEGORIES, type Category } from '@/lib/categories'
+import { IDENTITY, LINKS } from '@/lib/links'
 import { useGraphBridge } from './GraphBridge'
 
 /**
@@ -152,6 +153,7 @@ export function Terminal() {
             'tree             the whole portfolio at a glance',
             'cat <file>       peek at a project (frontmatter)',
             'open <path>      open a project / category / how-it-works for real',
+            'contact          links: github, linkedin, resume, email',
             'clear            clear the scrollback',
             'exit             close the terminal (ctrl+` toggles it)',
           ].join('\n'),
@@ -258,8 +260,18 @@ export function Terminal() {
         setOpen(false)
         break
 
+      case 'contact':
+        print(
+          'out',
+          [
+            `${IDENTITY.name} — ${IDENTITY.role}`,
+            ...LINKS.map((l) => `  ${l.label.padEnd(12)}${l.href.replace('mailto:', '')}`),
+          ].join('\n'),
+        )
+        break
+
       case 'whoami':
-        print('out', 'guest — the interesting one is in the file tree. try `tree`.')
+        print('out', 'guest — the interesting one is in the file tree. try `contact`.')
         break
 
       case 'sudo':
@@ -278,7 +290,7 @@ export function Terminal() {
     const isFirst = parts.length <= 1
     const partial = parts[parts.length - 1] ?? ''
     const candidates = isFirst
-      ? ['help', 'ls', 'cd', 'pwd', 'tree', 'cat', 'open', 'clear', 'exit'].filter(
+      ? ['help', 'ls', 'cd', 'pwd', 'tree', 'cat', 'open', 'contact', 'clear', 'exit'].filter(
           (c) => c.startsWith(partial),
         )
       : completePath(partial)

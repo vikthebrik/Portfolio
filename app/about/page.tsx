@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { projects } from '#site/content'
+import { IDENTITY, LINKS } from '@/lib/links'
 
 export const metadata: Metadata = {
   title: 'How it works — Portfolio',
@@ -113,6 +114,30 @@ tags: [graphic-design]   # → faint shared-topic threads`}
             other, so sixty-fps physics never cause a render storm. Media lives on a
             CDN, referenced by URL from frontmatter; the repository stays lean enough
             to read in one sitting.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-lg text-ink">Who</h2>
+          <p className="mt-2">
+            <span className="text-ink">{IDENTITY.name}</span> — {IDENTITY.role}.
+            Currently: quantitative methods consulting at UO Data Services, External
+            Lead at the UO Multicultural Center. Previously: HPC systems
+            administration on UO&apos;s Talapas cluster, Public Relations Chair of the
+            South Asian Cultural Alliance.
+          </p>
+          <p className="mt-3 flex flex-wrap gap-x-5 gap-y-1">
+            {LINKS.map((l) => (
+              <a
+                key={l.label}
+                href={l.href}
+                target={l.href.startsWith('mailto:') ? undefined : '_blank'}
+                rel="noreferrer noopener"
+                className="text-clay underline underline-offset-2"
+              >
+                {l.label} ↗
+              </a>
+            ))}
           </p>
         </section>
 
