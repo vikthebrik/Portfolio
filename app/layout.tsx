@@ -3,6 +3,7 @@ import { JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { GraphBridgeProvider } from '@/components/GraphBridge'
 import { Minimap } from '@/components/Minimap'
+import { Terminal } from '@/components/Terminal'
 
 // Mono-forward type (CLAUDE.md). Loaded here and mapped to --font-jetbrains-mono,
 // which app/globals.css feeds into the --font-mono token.
@@ -29,6 +30,7 @@ export default function RootLayout({
         <GraphBridgeProvider>
           {children}
           <Minimap />
+          <Terminal />
         </GraphBridgeProvider>
       </body>
     </html>
