@@ -37,6 +37,13 @@ const RING = 150 // radius added per layer (web/radial)
 const ROW = 130 // vertical gap per layer (tree)
 const CLUSTER_R = 220 // distance of each folder anchor from center (cluster)
 
+// Where a layout pins its center node. Exported so ForceGraph can tween the pin (and
+// the camera) toward the same point instead of letting the pin teleport it.
+export const layoutAnchor = (kind: LayoutKind, w: number, h: number) => ({
+  x: w / 2,
+  y: kind === 'tree' ? h / 2 - ROW : h / 2,
+})
+
 // Node circle radius — layer-first (root biggest → hubs → projects), with a small
 // degree bump for projects. Shared by the renderer and the collision force so they agree.
 const RADIUS_BY_LAYER = [16, 10, 6]
@@ -150,11 +157,12 @@ export function applyLayout(
     n.fx = null
     n.fy = null
   }
-  const anchorY = kind === 'tree' ? cy - ROW : cy
+  const anchor = layoutAnchor(kind, w, h)
+  const anchorY = anchor.y
   const centerNode = sim.nodes().find((n) => n.id === center)
   if (centerNode) {
-    centerNode.fx = cx
-    centerNode.fy = anchorY
+    centerNode.fx = anchor.x
+    centerNode.fy = anchor.y
   }
 
   switch (kind) {

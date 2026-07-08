@@ -24,6 +24,12 @@ const prefersReducedMotion = () =>
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
 
+// One shared duration + easing for the re-root motion: the center pin's travel and the
+// camera glide run in lockstep so the node never outruns the frame.
+const GLIDE_MS = 900
+const easeInOutCubic = (p: number) =>
+  p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2
+
 /**
  * Obsidian-style force graph. Layout comes from `lib/layouts` (swappable force
  * configs; the sim reheats without rebuilding, so drags survive). Node opacity is
@@ -35,6 +41,7 @@ export function ForceGraph({
   layout,
   projectOpacity,
   folderOpacity,
+  focusDim,
   center,
   query,
   onActivateNode,
@@ -43,6 +50,7 @@ export function ForceGraph({
   layout: LayoutKind
   projectOpacity: number // root/hubs are always on; only projects are dimmable
   folderOpacity: Record<Category, number>
+  focusDim: number // 0..1 — how hard non-cluster nodes fade during focus, per ring of distance
   center: string | null // the re-rooted node (null = root/overview): pinned + emphasized
   query: string // search — emphasize matching nodes, dim the rest
   onActivateNode: (node: GraphNode) => void
@@ -82,23 +90,22 @@ export function ForceGraph({
     }
   }
 
-  // Glide the camera so the (re-rooted) center node is framed at the viewport middle.
-  // The center is force-pinned to the pane center, so this mostly re-neutralizes any
-  // pan/zoom the user had. A short rAF tween drives d3-zoom's own transform (so its
-  // internal state stays in sync and the next gesture continues cleanly); zoom is held
-  // constant so an eased lerp of the translate is perfectly smooth. Reduced-motion jumps.
-  const flyToCenter = () => {
+  // Every re-root motion (pin travel + camera) shares this token; bumping it cancels
+  // any in-flight tween (a new re-root, a hand drag, unmount).
+  const glideToken = useRef(0)
+
+  // Glide the camera so the given graph point ends up framed at the viewport middle.
+  // A rAF tween drives d3-zoom's own transform (so its internal state stays in sync and
+  // the next gesture continues cleanly); zoom is held constant so an eased lerp of the
+  // translate is perfectly smooth. Reduced-motion jumps.
+  const flyTo = (gp: { x: number; y: number }) => {
     const svg = svgRef.current
     const behavior = zoomBehaviorRef.current
     if (!svg || !behavior) return
-    const cid = centerRef.current ?? ROOT_ID
-    const node = simNodesRef.current.find((n) => n.id === cid)
     const { w, h } = sizeRef.current
-    const gx = node?.fx ?? node?.x ?? w / 2
-    const gy = node?.fy ?? node?.y ?? h / 2
     const k = transformRef.current.k // keep the current zoom, just recenter
     const from = transformRef.current
-    const to = { x: w / 2 - k * gx, y: h / 2 - k * gy }
+    const to = { x: w / 2 - k * gp.x, y: h / 2 - k * gp.y }
     const sel = select(svg)
     const apply = (x: number, y: number) =>
       sel.call(behavior.transform, zoomIdentity.translate(x, y).scale(k))
@@ -107,14 +114,37 @@ export function ForceGraph({
       apply(to.x, to.y)
       return
     }
+    const token = glideToken.current
     const start = performance.now()
-    const dur = 500
     const step = (now: number) => {
-      const p = Math.min((now - start) / dur, 1)
-      const e = p * (2 - p) // easeOutQuad
+      // Superseded, or the svg left the DOM mid-flight (navigation) — d3-zoom can't
+      // resolve its extent against a detached element.
+      if (glideToken.current !== token || !svg.isConnected) return
+      const p = Math.min((now - start) / GLIDE_MS, 1)
+      const e = easeInOutCubic(p)
       apply(from.x + (to.x - from.x) * e, from.y + (to.y - from.y) * e)
       if (p < 1) requestAnimationFrame(step)
     }
+    requestAnimationFrame(step)
+  }
+
+  // Glide the center node's *pin* from where it sits to the layout anchor. Without this
+  // the fx/fy pin teleports the node to pane center on the next tick — the "snap".
+  const glidePin = (node: SimNode, to: { x: number; y: number }) => {
+    const from = { x: node.x ?? to.x, y: node.y ?? to.y }
+    if (Math.hypot(to.x - from.x, to.y - from.y) < 1) return
+    const token = glideToken.current
+    const start = performance.now()
+    const step = (now: number) => {
+      if (glideToken.current !== token) return // superseded
+      const p = Math.min((now - start) / GLIDE_MS, 1)
+      const e = easeInOutCubic(p)
+      node.fx = from.x + (to.x - from.x) * e
+      node.fy = from.y + (to.y - from.y) * e
+      if (p < 1) requestAnimationFrame(step)
+    }
+    node.fx = from.x
+    node.fy = from.y
     requestAnimationFrame(step)
   }
 
@@ -214,6 +244,7 @@ export function ForceGraph({
       ro.disconnect()
       sim.stop()
       sim.on('tick', null)
+      glideToken.current++ // cancel in-flight glides — their targets just unmounted
       if (bridge) bridge.snapshotRef.current = null // stale once the main graph unmounts
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -237,8 +268,9 @@ export function ForceGraph({
   }, [layout])
 
   // Re-root on the selected node: same forces, new center. Reheat so the layout reforms
-  // around it, then glide the camera to frame it. The full web stays on screen — nothing
-  // is filtered (CLAUDE.md "one living web"); only the anchor + emphasis change.
+  // around it, and glide (never snap) — the pin travels to the anchor and the camera
+  // tracks the same target over the same eased duration. The full web stays on screen —
+  // nothing is filtered (CLAUDE.md "one living web"); only the anchor + emphasis change.
   useEffect(() => {
     const sim = simRef.current
     if (!sim) return
@@ -246,13 +278,22 @@ export function ForceGraph({
     const edges = graph.edges.map((e) => ({ ...e }))
     applyLayout(sim, layoutRef.current, { w, h, edges, centerId: center })
     reapplySavedPins(sim.nodes())
+    glideToken.current++ // cancel any in-flight glide before starting this one
+    const cnode = simNodesRef.current.find((n) => n.id === (center ?? ROOT_ID))
+    // Where the pin actually ended up: the layout anchor, or a hand-drag pin that won.
+    const to = {
+      x: cnode?.fx ?? w / 2,
+      y: cnode?.fy ?? h / 2,
+    }
     if (prefersReducedMotion()) {
       sim.tick(300)
       setTick((t) => t + 1)
-    } else {
-      sim.alpha(0.7).restart()
+      flyTo(to)
+      return
     }
-    flyToCenter()
+    if (cnode) glidePin(cnode, to)
+    sim.alpha(0.5).restart()
+    flyTo(to)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [center])
 
@@ -306,6 +347,7 @@ export function ForceGraph({
       const sim = simRef.current
       const scene = sceneRef.current
       if (!sim || !scene) return
+      glideToken.current++ // a hand on a node cancels any in-flight glide
       ;(e.target as Element).setPointerCapture?.(e.pointerId)
 
       const start = { x: e.clientX, y: e.clientY }
@@ -374,8 +416,34 @@ export function ForceGraph({
   const focal = hovered ?? (center && center !== ROOT_ID ? center : null)
   const isMatch = (id: string) => searchSet?.has(id) ?? false
 
-  const isOn = (id: string) => !activeSet || activeSet.has(id)
   const pos = (id: string) => byId.get(id)
+
+  // De-emphasis falls off with graph-distance from the focal node, so same-ring nodes
+  // (e.g. the other hubs when a hub is centered) stay readable while far nodes recede.
+  // `focusDim` is the slider: 0 = no fade at all, 1 = hard old-style dimming.
+  const distFromFocal = useMemo(() => {
+    const src = hovered ?? (searchSet ? null : focal)
+    if (!src) return null // search: matches are scattered — no meaningful distance
+    const dist = new Map<string, number>([[src, 0]])
+    const queue = [src]
+    while (queue.length) {
+      const id = queue.shift()!
+      const d = dist.get(id)!
+      for (const nb of adjacency.get(id) ?? []) {
+        if (dist.has(nb)) continue
+        dist.set(nb, d + 1)
+        queue.push(nb)
+      }
+    }
+    return dist
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hovered, focal, searchSet, adjacency])
+
+  const dimFactor = (id: string) => {
+    if (!activeSet || activeSet.has(id)) return 1
+    const rings = distFromFocal ? Math.max((distFromFocal.get(id) ?? 3) - 1, 1) : 2
+    return Math.max(0.05, Math.pow(1 - focusDim, rings))
+  }
 
   // Base opacity: root/hubs/about are always on (1); only projects are dimmable, by the
   // projects slider × their folder slider. Folder opacity thus dims a category's
@@ -391,10 +459,10 @@ export function ForceGraph({
   }
 
   const labelOpacity = (n: GraphNode) => {
-    // Structural nodes are always labelled (emphasis dimming still applies via the
-    // group's opacity); project labels fade with zoom unless pinned/hovered.
+    // Structural nodes are always labelled; project labels fade with zoom unless
+    // pinned/hovered. Emphasis dimming applies via the group's opacity (dimFactor),
+    // so off-cluster labels fade with their node instead of vanishing outright.
     if (n.type !== 'project') return 1
-    if (!isOn(n.id)) return 0
     const base = baseOpacity(n)
     if (n.pinned || hovered === n.id || isMatch(n.id)) return base
     return base * clamp((k - 0.7) / 0.8, 0, 1)
@@ -424,7 +492,13 @@ export function ForceGraph({
               const touchesFocal =
                 focal != null && (e.source === focal || e.target === focal)
               const eBase = Math.min(baseOf(e.source), baseOf(e.target))
-              const emphasis = activeSet ? (on ? 0.9 : 0.06) : e.kind === 'tag' ? 0.5 : 0.8
+              const emphasis = activeSet
+                ? on
+                  ? 0.9
+                  : 0.75 * Math.min(dimFactor(e.source), dimFactor(e.target))
+                : e.kind === 'tag'
+                  ? 0.5
+                  : 0.8
               return (
                 <path
                   key={`${e.source}::${e.target}:${e.kind}`}
@@ -440,7 +514,6 @@ export function ForceGraph({
           <g>
             {graph.nodes.map((n) => {
               const p = pos(n.id)
-              const on = isOn(n.id)
               const isFocal = n.id === focal
               const r = nodeRadius(n)
               const base = baseOpacity(n)
@@ -461,7 +534,7 @@ export function ForceGraph({
                   data-node
                   transform={`translate(${p?.x ?? 0},${p?.y ?? 0})`}
                   className="cursor-pointer"
-                  style={{ opacity: activeSet ? (on ? base : base * 0.12) : base }}
+                  style={{ opacity: base * dimFactor(n.id) }}
                   onPointerDown={onNodePointerDown(n as SimNode)}
                   onPointerEnter={() => setHovered(n.id)}
                   onPointerLeave={() => setHovered((h) => (h === n.id ? null : h))}
