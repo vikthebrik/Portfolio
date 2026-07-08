@@ -7,9 +7,22 @@
 
 export const IDENTITY = {
   name: 'Vikram Thirumaran',
-  role: 'CS + Data Science @ University of Oregon (class of 2027)',
+  role: 'CS + Data Science @ University of Oregon (class of 2027), minors in Math and Cognitive Science',
   email: 'vikramthirumaran@gmail.com',
 }
+
+// Selected coursework — each of these has a public repo on the GitHub above.
+export const COURSEWORK = [
+  { code: 'CS 313', title: 'Intermediate Data Structures' },
+  { code: 'CS 315', title: 'Intermediate Algorithms' },
+  { code: 'CS 330', title: 'C/C++ & Unix' },
+  { code: 'CS 415', title: 'Operating Systems' },
+  { code: 'CS 422', title: 'Software Methodology' },
+  { code: 'CS 471', title: 'Intro to Artificial Intelligence' },
+  { code: 'DSCI 311', title: 'Principles & Techniques of Data Science' },
+  { code: 'DSCI 345M', title: 'Probability & Statistics for Data Science' },
+  { code: 'DSCI 372M', title: 'Machine Learning for Data Science' },
+] as const
 
 export const LINKS = [
   { label: 'github', href: 'https://github.com/vikthebrik' },

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { projects } from '#site/content'
-import { IDENTITY, LINKS } from '@/lib/links'
+import { COURSEWORK, IDENTITY, LINKS } from '@/lib/links'
 
 export const metadata: Metadata = {
   title: 'How it works — Portfolio',
@@ -129,6 +129,15 @@ tags: [graphic-design]   # → faint shared-topic threads`}
             administration on UO&apos;s Talapas cluster, Public Relations Chair of the
             South Asian Cultural Alliance.
           </p>
+          <h3 className="mt-5 text-sm text-ink">Coursework</h3>
+          <ul className="mt-2 grid gap-x-6 gap-y-1 sm:grid-cols-2">
+            {COURSEWORK.map((c) => (
+              <li key={c.code} className="text-sm">
+                <span className="text-ink">{c.code}</span>{' '}
+                <span className="text-muted">{c.title}</span>
+              </li>
+            ))}
+          </ul>
           <p className="mt-3 flex flex-wrap gap-x-5 gap-y-1">
             {LINKS.map((l) => (
               <a
