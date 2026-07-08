@@ -140,9 +140,12 @@ One always-visible web; navigation is emphasis + routing, not subgraph filtering
 - **overview** — the full web, rooted on `root`. No node is hidden.
 - **re-root** — clicking **any** node (a category hub *or* a project) makes it the new
   center: the layout reheats so the web rings by graph-distance *from it* (`applyLayout`'s
-  `centerId`), the camera glides to frame it, and its cluster (the node + its direct
-  neighbors) is emphasized while everything else fades/minimizes. The full web stays on
-  screen — nothing is filtered. Synced to the URL as `?focus=<nodeId>` (a shareable deep
+  `centerId`), and the motion **glides, never snaps** — the center pin travels from the
+  node's current spot to the layout anchor while the camera tracks the same target, one
+  shared ~900ms eased tween (`GLIDE_MS`; reduced-motion jumps instantly). Its cluster
+  (the node + direct neighbors) is emphasized; everything else fades **by graph-distance
+  from the center** (see "focus fade" below), so same-ring peers — the other hubs — stay
+  readable instead of vanishing. The full web stays on screen — nothing is filtered. Synced to the URL as `?focus=<nodeId>` (a shareable deep
   link) via the History API, so the graph never remounts and **browser Back/Forward — plus
   the in-graph `‹ ›` buttons — traverse the re-root history**. Clicking `root`, the centered
   hub again, or "overview" in the breadcrumb clears back to the root. A *project* takes one
@@ -167,6 +170,20 @@ The simulation runs once and is never rebuilt on navigation; a re-root **reheats
 it only ever changes forces + styling, never filters the web. Hand-drag pins still win over
 the center pin. (`focusCategory()` from the old filtered-subgraph model is retired.)
 
+## Terminal (the IDE way in)
+
+`components/Terminal.tsx`, mounted once in `app/layout.tsx` (persists across pages, like
+the minimap). A unix-style shell over the content tree — categories are directories,
+projects are `.mdx` files, `how-it-works.md` routes to `/about`. **Traversal only**:
+`ls` / `cd` / `pwd` / `tree` / `cat` (frontmatter peek) / `open` (real navigation), plus
+`help` / `clear` / `exit`. Pulled up/down with **ctrl+`** (VS Code's binding) or the
+bottom-left `>_ terminal` tab; Escape and `exit` close it. ↑/↓ history, Tab completion
+(commands + paths). `cd` into a category re-roots the main graph through the GraphBridge
+center channel when it's on screen (URL stays in sync); on other pages `cd` is
+shell-local and `open` navigates. The FS derives from `#site/content` — adding a project
+automatically adds its file here too. Desktop-only (hidden on mobile); the panel uses
+`inert` when closed so it stays mounted (slide transition) without trapping focus.
+
 ## Manual control (override the auto-derivation)
 
 Auto-derivation is the default; these let a human override it:
@@ -179,6 +196,12 @@ Auto-derivation is the default; these let a human override it:
   `projectOpacity × folderOpacity[category]` (one projects slider + four folder sliders).
   This is how the graph reads as deliberate layers without hiding the structure.
   Persisted in `view:v1`.
+- **Focus fade** (`focusDim`, slider in the view panel) — how hard non-cluster nodes fade
+  during focus/hover: the multiplier is `(1 - focusDim)^rings` by BFS distance from the
+  focal node (floor 0.05), so with the default 0.6 a centered hub keeps its peers at 0.4
+  while their projects recede to ~0.16. 0 = no fade; 1 = the old hard dim. Search uses a
+  flat two-ring dim (matches are scattered; distance is meaningless). Persisted in
+  `view:v1`.
 - **Hand-dragged node positions** — dragging a node pins it (`fx/fy`) and persists to
   `localStorage['portfolio:graph:positions:v1']` as `{ [id]: {x, y} }`, reapplied on
   load. Pins win over the layout (the ultimate override); switching layout only
