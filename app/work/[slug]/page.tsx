@@ -79,13 +79,15 @@ export default async function CaseStudy({
       ) : null}
 
       {project.cover ? (
-        <div className="relative mt-8 aspect-[16/9] w-full border border-line bg-surface">
+        // Contain, never crop — covers are real work (posters are often portrait),
+        // so letterbox on surface instead of guillotining them. Same rule as <Figure>.
+        <div className="relative mt-8 aspect-[16/10] w-full border border-line bg-surface">
           <Image
             src={project.cover}
             alt={`${project.title} cover`}
             fill
             sizes="(max-width: 768px) 100vw, 672px"
-            className="object-cover"
+            className="object-contain"
           />
         </div>
       ) : null}
