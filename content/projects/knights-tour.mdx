@@ -6,6 +6,7 @@ summary: Implementations and analysis of the Knight's Tour — Warnsdorff's heur
 tags: [algorithms, python, optimization, data-viz]
 related: [echoai]
 year: 2024
+cover: https://5b2ygyxs1w5e09rf.public.blob.vercel-storage.com/portfolio/tech/knights-tour/75x75.png
 links:
   repo: https://github.com/vikthebrik/Knights_Tour
 ---
@@ -29,7 +30,26 @@ alongside visualizations of the resulting paths.
 - **3D extension** (`3D_general.ipynb`) — the tour lifted onto a three-dimensional board, with
   new movement rules and the added combinatorial complexity that brings.
 
-A written guide (matrix overlays, degree heuristics, historical context) accompanies the code.
+A written guide (matrix overlays, degree heuristics, historical context) accompanies the
+code, and the work was presented as **Hamiltonian Knight Tours** (with Devin and Josh) —
+the full deck is below.
 
-{/* Imported from GitHub — this is a draft distilled from the repo README. Refine the prose
-and add a result/visualization once media is hosted. */}
+## Tours, drawn
+
+The path plots are the payoff — the same algorithm's character at three scales, then the
+jump to three dimensions.
+
+<Gallery columns={3}>
+  <Figure src="https://5b2ygyxs1w5e09rf.public.blob.vercel-storage.com/portfolio/tech/knights-tour/5x5_grid.png" alt="Knight's tour on a 5×5 board with numbered move order" ratio="1128/1144" caption="5×5 — every move numbered." />
+  <Figure src="https://5b2ygyxs1w5e09rf.public.blob.vercel-storage.com/portfolio/tech/knights-tour/20x20.png" alt="Knight's tour path on a 20×20 board" ratio="1141/1144" caption="20×20 — Warnsdorff at speed." />
+  <Figure src="https://5b2ygyxs1w5e09rf.public.blob.vercel-storage.com/portfolio/tech/knights-tour/75x75.png" alt="Knight's tour path covering a 75×75 board" ratio="1132/1144" caption="75×75 — 5,625 squares, one path." />
+</Gallery>
+
+<Gallery columns={2}>
+  <Figure src="https://5b2ygyxs1w5e09rf.public.blob.vercel-storage.com/portfolio/tech/knights-tour/cube.png" alt="3D knight's tour through a cubic lattice" ratio="403/391" caption="The 3D generalization — a tour through a cubic lattice." />
+  <Figure src="https://5b2ygyxs1w5e09rf.public.blob.vercel-storage.com/portfolio/tech/knights-tour/sphere.png" alt="Knight's tour mapped onto a sphere" ratio="410/398" caption="…and wrapped onto a sphere." />
+</Gallery>
+
+## The presentation
+
+<Figure src="https://5b2ygyxs1w5e09rf.public.blob.vercel-storage.com/portfolio/tech/knights-tour/presentation-cover.jpg" alt="Hamiltonian Knight Tours presentation title slide" ratio="16/9" href="https://5b2ygyxs1w5e09rf.public.blob.vercel-storage.com/portfolio/tech/knights-tour/hamiltonian-knight-tours.pdf" caption="Hamiltonian Knight Tours — the 23-slide deck: theory, heuristics, and the visualizations above." />

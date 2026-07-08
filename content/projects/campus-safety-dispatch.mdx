@@ -6,6 +6,7 @@ summary: A full-stack incident reporting and dispatch platform — anonymous pub
 tags: [full-stack, databases, real-time, performance, data-viz]
 related: [mcc-scheduler]
 year: 2026
+cover: https://5b2ygyxs1w5e09rf.public.blob.vercel-storage.com/portfolio/tech/campus-safety-dispatch/dispatch-home.jpg
 links:
   repo: https://github.com/vikthebrik/InterviewProj
   demo: https://interview-proj-waph.vercel.app
@@ -37,5 +38,10 @@ keeping UO's visual identity.
 Next.js 16 (App Router) + React 19 + Tailwind v4 on Vercel; Express 5 on Render; Supabase
 (PostgreSQL 15, Auth, Realtime, Storage); Recharts for the analytics overlay.
 
-{/* Imported from GitHub — draft distilled from the repo README. The live demo is linked
-above; add a board screenshot once hosted externally. */}
+<Gallery columns={1}>
+  <Figure src="https://5b2ygyxs1w5e09rf.public.blob.vercel-storage.com/portfolio/tech/campus-safety-dispatch/dispatch-home.jpg" alt="Anonymous incident submission form in UO's visual identity" ratio="2880/1800" caption="The public entry point — anonymous submission, no account needed, live at the demo link above." />
+  <Figure src="https://5b2ygyxs1w5e09rf.public.blob.vercel-storage.com/portfolio/tech/campus-safety-dispatch/dispatch-architecture.png" alt="Full-stack architecture diagram: client roles, Next.js frontend, Node cluster load balancer, Express API, Supabase data layer" ratio="2547/1560" caption="The full stack — client roles through the Node cluster load balancer to Supabase, RLS per role, SSE for live updates." />
+</Gallery>
+
+{/* The /admin dispatch board (kanban) needs an admin login — add a board screenshot
+from an authenticated session to complete the set. */}
