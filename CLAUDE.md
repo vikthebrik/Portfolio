@@ -84,6 +84,17 @@ Git, builds, and deploys.
 - Only small inline diagrams (<200KB, e.g. an architecture sketch) may live
   beside the MDX and be processed by Velite's `s.image()`.
 
+The store is **Vercel Blob**. Upload with `npm run media:upload -- <file-or-dir>
+[--prefix <folder>]` (`scripts/upload-media.mjs`; reads `BLOB_READ_WRITE_TOKEN`
+from `.env`) — deterministic paths (`portfolio/<prefix>/<name>`, overwrite on
+re-upload → stable URLs), prints each URL plus a ready-to-paste `<Figure>`
+snippet with the sniffed aspect ratio. In MDX bodies, images go through the
+**`<Figure>` / `<Gallery>`** components (`components/mdx/`, registered in
+`MDXContent.tsx`): `Figure` is a captioned, never-cropping (object-contain)
+frame — pass the true `ratio` to avoid letterboxing; a PDF is represented by a
+preview image with the PDF's Blob URL as `href` ("view full ↗"). `Gallery` is a
+responsive 1–3-column grid of Figures — the backbone of design case studies.
+
 ## Design language
 
 Warm-analog, restrained, Obsidian-style — quiet "Claude Code" feel. The single
