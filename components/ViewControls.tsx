@@ -18,6 +18,8 @@ export function ViewControls({
   onProjectOpacityChange,
   folderOpacity,
   onFolderChange,
+  focusDim,
+  onFocusDimChange,
   onResetPositions,
 }: {
   layout: 'auto' | LayoutKind
@@ -27,6 +29,8 @@ export function ViewControls({
   onProjectOpacityChange: (value: number) => void
   folderOpacity: Record<Category, number>
   onFolderChange: (category: Category, value: number) => void
+  focusDim: number
+  onFocusDimChange: (value: number) => void
   onResetPositions: () => void
 }) {
   const [open, setOpen] = useState(false)
@@ -76,6 +80,14 @@ export function ViewControls({
               onChange={onProjectOpacityChange}
             />
             <p className="mt-1 text-faint">root &amp; hubs are always on</p>
+          </Section>
+
+          <Section label="focus">
+            <Slider label="fade" value={focusDim} onChange={onFocusDimChange} />
+            <p className="mt-1 text-faint">
+              how hard the rest fades when a node is centered — falls off per ring of
+              distance, so peers stay visible
+            </p>
           </Section>
 
           <Section label="opacity · folder">

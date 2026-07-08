@@ -26,6 +26,7 @@ type ViewState = {
   layout: 'auto' | LayoutKind
   projectOpacity: number // root/hubs always on; only projects are dimmable
   folderOpacity: Record<Category, number>
+  focusDim: number // 0..1 — per-ring fade of non-cluster nodes during focus/hover
 }
 
 const defaultView = (): ViewState => ({
@@ -35,6 +36,7 @@ const defaultView = (): ViewState => ({
     Category,
     number
   >,
+  focusDim: 0.6, // same-ring peers stay readable; each further ring fades harder
 })
 
 /**
@@ -169,6 +171,8 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
               folderOpacity: { ...v.folderOpacity, [cat]: val },
             }))
           }
+          focusDim={view.focusDim}
+          onFocusDimChange={(val) => setView((v) => ({ ...v, focusDim: val }))}
           onResetPositions={resetPositions}
         />
         <ForceGraph
@@ -177,6 +181,7 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
           layout={resolvedLayout}
           projectOpacity={view.projectOpacity}
           folderOpacity={view.folderOpacity}
+          focusDim={view.focusDim}
           center={center}
           query={query}
           onActivateNode={activateNode}
