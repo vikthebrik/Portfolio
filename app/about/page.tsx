@@ -71,7 +71,9 @@ export default function About() {
             <code className="bg-surface px-1 py-0.5 text-[0.85em] text-ink">cat</code>,{' '}
             <code className="bg-surface px-1 py-0.5 text-[0.85em] text-ink">open</code>
             ). <code className="bg-surface px-1 py-0.5 text-[0.85em] text-ink">cd design</code>{' '}
-            re-roots the live graph.
+            re-roots the live graph. In a hurry,{' '}
+            <code className="bg-surface px-1 py-0.5 text-[0.85em] text-ink">⌘K</code>{' '}
+            opens a command palette that jumps anywhere from any page.
           </p>
         </section>
 

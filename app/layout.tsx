@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { JetBrains_Mono } from 'next/font/google'
 import './globals.css'
+import { CommandPalette } from '@/components/CommandPalette'
 import { GraphBridgeProvider } from '@/components/GraphBridge'
 import { Minimap } from '@/components/Minimap'
 import { Terminal } from '@/components/Terminal'
@@ -37,6 +38,7 @@ export default function RootLayout({
           {children}
           <Minimap />
           <Terminal />
+          <CommandPalette />
         </GraphBridgeProvider>
       </body>
     </html>

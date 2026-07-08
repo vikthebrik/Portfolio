@@ -68,6 +68,28 @@ test.describe('the terminal', () => {
   })
 })
 
+test.describe('the command palette', () => {
+  test('⌘K opens it; typing + Enter jumps to a case study', async ({ page }) => {
+    await page.goto('/')
+    await page.keyboard.press('ControlOrMeta+k')
+    const palette = page.getByRole('dialog', { name: 'Command palette' })
+    await expect(palette).toBeVisible()
+
+    await palette.getByRole('textbox').fill('knight')
+    await palette.getByRole('textbox').press('Enter')
+    await expect(page).toHaveURL(/\/work\/knights-tour/)
+  })
+
+  test('works from a detail page and re-roots via deep link', async ({ page }) => {
+    await page.goto('/work/mcc-scheduler')
+    await page.keyboard.press('ControlOrMeta+k')
+    const palette = page.getByRole('dialog', { name: 'Command palette' })
+    await palette.getByRole('textbox').fill('design')
+    await palette.getByRole('option').filter({ hasText: 're-root the web' }).first().click()
+    await expect(page).toHaveURL(/\/\?focus=design/)
+  })
+})
+
 test.describe('pages', () => {
   test('/about carries the identity block', async ({ page }) => {
     await page.goto('/about')

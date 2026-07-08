@@ -6,6 +6,7 @@ import { projects } from '#site/content'
 import { CATEGORIES, type Category } from '@/lib/categories'
 import { IDENTITY, LINKS } from '@/lib/links'
 import { useGraphBridge } from './GraphBridge'
+import { TOGGLE_TERMINAL_EVENT } from './CommandPalette'
 
 /**
  * A unix-style shell over the portfolio's content tree — the IDE-familiar way in.
@@ -324,7 +325,8 @@ export function Terminal() {
 
   // --- wiring ------------------------------------------------------------------
 
-  // ctrl+` toggles, from anywhere (VS Code's muscle memory).
+  // ctrl+` toggles, from anywhere (VS Code's muscle memory) — and so does the
+  // command palette, through a window event.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === '`' && (e.ctrlKey || e.metaKey)) {
@@ -332,8 +334,13 @@ export function Terminal() {
         setOpen((o) => !o)
       }
     }
+    const onToggle = () => setOpen((o) => !o)
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener(TOGGLE_TERMINAL_EVENT, onToggle)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener(TOGGLE_TERMINAL_EVENT, onToggle)
+    }
   }, [])
 
   useEffect(() => {
