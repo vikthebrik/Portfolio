@@ -59,6 +59,15 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
   const [remountKey, setRemountKey] = useState(0)
   const loaded = useRef(false)
 
+  const setCenter = useCallback((next: string | null) => {
+    setCenterState(next)
+    window.history.pushState(
+      null,
+      '',
+      next ? `/?focus=${encodeURIComponent(next)}` : '/',
+    )
+  }, [])
+
   // Launch intro (see lib/intro): -1 = pending (first client render, everything
   // hidden — matches the SSR paint, so no hydration mismatch), then either the
   // staged timeline (0 → 1 → 2 → 3) or a straight jump to done.
@@ -101,8 +110,8 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
     launched.current = true
     setIntro(1)
     introTimers.current = [
-      window.setTimeout(() => setIntro(2), 900),
-      window.setTimeout(() => finishIntro(true), 1800),
+      window.setTimeout(() => setIntro(2), 1800),
+      window.setTimeout(() => finishIntro(true), 4000),
     ]
   }, [finishIntro])
 
@@ -153,14 +162,7 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
     window.localStorage.setItem(VIEW_KEY, JSON.stringify(view))
   }, [view])
 
-  const setCenter = useCallback((next: string | null) => {
-    setCenterState(next)
-    window.history.pushState(
-      null,
-      '',
-      next ? `/?focus=${encodeURIComponent(next)}` : '/',
-    )
-  }, [])
+
 
   // Let the minimap re-root the main graph (it lives outside this tree, in app/layout).
   useEffect(() => {
@@ -283,7 +285,7 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
             intro < 2 ? 'pointer-events-none opacity-0' : ''
           }`}
         >
-          <GraphNav graph={graph} center={center} onCenter={setCenter} />
+          <GraphNav graph={graph} center={center} onCenter={setCenter} onReplayIntro={replayIntro} />
           <ViewControls
           layout={view.layout}
           autoDefault={autoDefault}
@@ -332,10 +334,12 @@ function GraphNav({
   graph,
   center,
   onCenter,
+  onReplayIntro,
 }: {
   graph: Graph
   center: string | null
   onCenter: (id: string | null) => void
+  onReplayIntro: () => void
 }) {
   const node = center ? (graph.nodes.find((n) => n.id === center) ?? null) : null
   const crumb = 'font-mono text-xs'
@@ -398,6 +402,18 @@ function GraphNav({
           open ↵
         </Link>
       )}
+
+      <div className="h-3 w-px bg-line" />
+      <button
+        type="button"
+        onClick={onReplayIntro}
+        title="Replay intro animation"
+        aria-label="Replay intro animation"
+        className="font-mono text-xs text-muted hover:text-clay flex items-center gap-1 cursor-pointer"
+      >
+        <span>⟲</span>
+        <span className="hidden sm:inline">replay</span>
+      </button>
     </div>
   )
 }

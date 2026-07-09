@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { forceSimulation, type Simulation } from 'd3-force'
+import { forceSimulation, forceCollide, type Simulation } from 'd3-force'
 import { select } from 'd3-selection'
 import { zoom as d3zoom, zoomIdentity, type ZoomBehavior } from 'd3-zoom'
-import type { Category } from '@/lib/categories'
-import { ROOT_ID, type EdgeKind, type Graph, type GraphNode } from '@/lib/graph'
+import { CATEGORIES, type Category } from '@/lib/categories'
+import { ROOT_ID, ABOUT_ID, type EdgeKind, type Graph, type GraphNode } from '@/lib/graph'
 import { applyLayout, nodeRadius, type LayoutKind, type SimNode } from '@/lib/layouts'
 import { useGraphBridge, type Transform } from './GraphBridge'
 
@@ -239,10 +239,27 @@ export function ForceGraph({
           y: clamp(window.innerHeight / 2 - rect.top, 0, h),
         }
         introSeed.current = seed
+        const spokes = [...CATEGORIES, ABOUT_ID]
+        const getSpokeAngle = (id: string) => {
+          const idx = spokes.indexOf(id)
+          if (idx === -1) return 0
+          return (idx / spokes.length) * 2 * Math.PI - Math.PI / 2
+        }
+
         for (const n of nodes) {
           if (n.fx != null && n.id !== ROOT_ID) continue // hand pins stay put
-          n.x = seed.x + (Math.random() - 0.5) * 60
-          n.y = seed.y + (Math.random() - 0.5) * 60
+          if (n.type === 'category' || n.type === 'about') {
+            const angle = getSpokeAngle(n.id)
+            n.x = seed.x + Math.cos(angle) * 8
+            n.y = seed.y + Math.sin(angle) * 8
+          } else if (n.type === 'project' && n.category) {
+            const angle = getSpokeAngle(n.category)
+            n.x = seed.x + Math.cos(angle) * 10
+            n.y = seed.y + Math.sin(angle) * 10
+          } else {
+            n.x = seed.x
+            n.y = seed.y
+          }
         }
         introHeld.current = true
         sim.stop()
@@ -304,7 +321,135 @@ export function ForceGraph({
       root.y = seed.y
       glidePin(root, anchor)
     }
-    sim.alpha(1).restart()
+    sim.alpha(0.65).restart()
+  }, [intro])
+
+  // At stage 2, projects bloom. To make it feel like synthetic biology,
+  // we seed each project's position at its category hub's current position
+  // so they visually bud and push outward from their parent hubs.
+  useEffect(() => {
+    if (intro !== 2) return
+    const sim = simRef.current
+    if (!sim) return
+
+    // Find the hubs/about nodes' current positions
+    const hubPositions = new Map<string, { x: number; y: number }>()
+    for (const n of simNodesRef.current) {
+      if (n.type === 'category' || n.type === 'about') {
+        hubPositions.set(n.id, { x: n.x ?? 0, y: n.y ?? 0 })
+      }
+    }
+
+    const spokes = [...CATEGORIES, ABOUT_ID]
+    const getSpokeAngle = (id: string) => {
+      const idx = spokes.indexOf(id)
+      if (idx === -1) return 0
+      return (idx / spokes.length) * 2 * Math.PI - Math.PI / 2
+    }
+
+    // Group projects by category
+    const projectsByCat = new Map<string, SimNode[]>()
+    for (const n of simNodesRef.current) {
+      if (n.type === 'project' && n.category) {
+        if (!projectsByCat.has(n.category)) projectsByCat.set(n.category, [])
+        projectsByCat.get(n.category)!.push(n)
+      }
+    }
+
+    // Seed project positions radially around their parent hub in a fan shape pointing away from the center
+    for (const [cat, list] of projectsByCat.entries()) {
+      const hubPos = hubPositions.get(cat)
+      if (!hubPos) continue
+      const hubAngle = getSpokeAngle(cat)
+      
+      list.forEach((p, idx) => {
+        const fanSpread = Math.PI / 1.5
+        const angle = list.length > 1
+          ? hubAngle - fanSpread / 2 + (idx / (list.length - 1)) * fanSpread
+          : hubAngle
+        p.x = hubPos.x + Math.cos(angle) * 12
+        p.y = hubPos.y + Math.sin(angle) * 12
+        p.fx = null
+        p.fy = null
+      })
+    }
+
+    sim.alpha(0.55).restart()
+  }, [intro])
+
+  // Configure forces dynamically based on the intro stage to prevent jitter
+  // and make the growth structured (like roots growing from the center).
+  useEffect(() => {
+    const sim = simRef.current
+    if (!sim) return
+
+    // 1. Dynamic velocityDecay (friction) for slow organic movement.
+    // Start with extremely high friction (0.94) to absorb the initial force shock,
+    // then ramp down to a steady organic drift (0.80) after 350ms.
+    if (intro < 3) {
+      sim.velocityDecay(0.94)
+      const t = window.setTimeout(() => {
+        if (introRef.current < 3) {
+          sim.velocityDecay(0.80)
+        }
+      }, 350)
+
+      // 2. Dynamic collision force: invisible projects have 0 collision radius
+      // so they don't cause explosive initial jitter.
+      const collisionPadding = 52
+      sim.force(
+        'collide',
+        forceCollide<SimNode>((n) => {
+          if (intro < 2 && n.type === 'project') return 0
+          return nodeRadius(n) + collisionPadding
+        })
+      )
+
+      // 3. Dynamic link force: during stage 1, only spoke edges (root -> hubs)
+      // are active, so hubs can branch out of root without being pulled back by projects.
+      const linkForce = sim.force('link') as any
+      if (linkForce) {
+        const linkStrengthScale =
+          layoutRef.current === 'radial'
+            ? 0.3
+            : layoutRef.current === 'tree'
+              ? 0.4
+              : 1
+        linkForce.strength((e: any) => {
+          const kind = e.kind
+          const weight = e.weight ?? 1
+          if (intro < 2 && kind !== 'spoke') return 0
+          return weight * linkStrengthScale
+        })
+      }
+
+      // Re-heat simulation to apply the new forces gently
+      if (intro === 1) {
+        sim.alpha(0.5).restart()
+      } else if (intro === 2) {
+        sim.alpha(0.45).restart()
+      }
+
+      return () => window.clearTimeout(t)
+    } else {
+      sim.velocityDecay(0.4) // default
+      // Restore standard forces when intro is complete
+      const collisionPadding = 52
+      sim.force(
+        'collide',
+        forceCollide<SimNode>((n) => nodeRadius(n) + collisionPadding)
+      )
+      const linkForce = sim.force('link') as any
+      if (linkForce) {
+        const linkStrengthScale =
+          layoutRef.current === 'radial'
+            ? 0.3
+            : layoutRef.current === 'tree'
+              ? 0.4
+              : 1
+        linkForce.strength((e: any) => (e.weight ?? 1) * linkStrengthScale)
+      }
+    }
   }, [intro])
 
   // Re-run the layout when the user switches it — reheat, keep nodes + pins.
@@ -370,10 +515,27 @@ export function ForceGraph({
       y: clamp(window.innerHeight / 2 - rect.top, 0, h),
     }
     introSeed.current = seed
+    const spokes = [...CATEGORIES, ABOUT_ID]
+    const getSpokeAngle = (id: string) => {
+      const idx = spokes.indexOf(id)
+      if (idx === -1) return 0
+      return (idx / spokes.length) * 2 * Math.PI - Math.PI / 2
+    }
+
     for (const n of simNodesRef.current) {
       if (n.fx != null && n.id !== ROOT_ID) continue
-      n.x = seed.x + (Math.random() - 0.5) * 60
-      n.y = seed.y + (Math.random() - 0.5) * 60
+      if (n.type === 'category' || n.type === 'about') {
+        const angle = getSpokeAngle(n.id)
+        n.x = seed.x + Math.cos(angle) * 8
+        n.y = seed.y + Math.sin(angle) * 8
+      } else if (n.type === 'project' && n.category) {
+        const angle = getSpokeAngle(n.category)
+        n.x = seed.x + Math.cos(angle) * 10
+        n.y = seed.y + Math.sin(angle) * 10
+      } else {
+        n.x = seed.x
+        n.y = seed.y
+      }
     }
     introHeld.current = true
     sim.stop()
@@ -618,7 +780,7 @@ export function ForceGraph({
   const introDelay = (id: string) => {
     let h = 0
     for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 997
-    return (h % 6) * 110
+    return (h % 6) * 160
   }
 
   const labelOpacity = (n: GraphNode) => {
@@ -662,6 +824,11 @@ export function ForceGraph({
                   ? 0.9
                   : 0.75 * Math.min(dimFactor(e.source), dimFactor(e.target)) * eBase
                 : (e.kind === 'tag' ? 0.5 : 0.8) * eBase
+
+              const bothVisible = introOf(e.source) > 0 && introOf(e.target) > 0
+              const edgeLength = e.kind === 'tag' ? 380 : e.kind === 'related' ? 280 : 180
+              const strokeDashoffset = intro < 3 ? (bothVisible ? 0 : edgeLength) : undefined
+
               return (
                 <path
                   key={`${e.source}::${e.target}:${e.kind}`}
@@ -671,10 +838,15 @@ export function ForceGraph({
                   style={{
                     strokeWidth: STROKE_WIDTH[e.kind],
                     opacity: opacity * Math.min(introOf(e.source), introOf(e.target)),
+                    strokeDasharray: intro < 3 ? edgeLength : undefined,
+                    strokeDashoffset,
+                    transition: intro < 3
+                      ? 'stroke-dashoffset 2200ms cubic-bezier(0.25, 1, 0.25, 1), opacity 1000ms ease-in-out'
+                      : undefined,
                     // Edges surface after their endpoints have budded.
                     transitionDelay:
                       intro < 3
-                        ? `${200 + Math.max(introDelay(e.source), introDelay(e.target))}ms`
+                        ? `${150 + Math.max(introDelay(e.source), introDelay(e.target))}ms`
                         : undefined,
                   }}
                 />
@@ -736,11 +908,11 @@ export function ForceGraph({
                     style={
                       intro < 3
                         ? {
-                            transform: introFactor(n) ? 'scale(1)' : 'scale(0.2)',
+                            transform: introFactor(n) ? 'scale(1)' : 'scale(0.01)',
                             transformBox: 'fill-box',
                             transformOrigin: 'center',
                             transition:
-                              'transform 900ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+                              'transform 1800ms cubic-bezier(0.16, 1, 0.3, 1)',
                             transitionDelay: `${introDelay(n.id)}ms`,
                           }
                         : undefined

@@ -27,15 +27,15 @@ export const LAYOUTS: LayoutKind[] = ['web', 'radial', 'tree', 'cluster']
 export type SimNode = GraphNode & SimulationNodeDatum
 
 const LINK_DISTANCE: Record<EdgeKind, number> = {
-  spoke: 110,
-  membership: 95,
-  related: 150,
-  tag: 230,
+  spoke: 130,
+  membership: 125,
+  related: 180,
+  tag: 260,
 }
 
-const RING = 185 // radius added per layer (web/radial)
-const ROW = 130 // vertical gap per layer (tree)
-const CLUSTER_R = 250 // distance of each folder anchor from center (cluster)
+const RING = 215 // radius added per layer (web/radial)
+const ROW = 155 // vertical gap per layer (tree)
+const CLUSTER_R = 285 // distance of each folder anchor from center (cluster)
 
 // Where a layout pins its center node. Exported so ForceGraph can tween the pin (and
 // the camera) toward the same point instead of letting the pin teleport it.
@@ -142,7 +142,7 @@ export function applyLayout(
       .distance((_l, i) => LINK_DISTANCE[edges[i].kind])
       .strength((_l, i) => edges[i].weight * linkStrengthScale),
   )
-  sim.force('collide', forceCollide<SimNode>((n) => nodeRadius(n) + 36))
+  sim.force('collide', forceCollide<SimNode>((n) => nodeRadius(n) + 52))
 
   // Clear positional forces; each layout re-adds only what it uses.
   sim.force('charge', null)

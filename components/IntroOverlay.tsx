@@ -68,10 +68,10 @@ export function IntroOverlay({
         disabled={stage !== 0}
         autoFocus
         aria-label="Launch the project graph"
-        className={`group mt-10 flex cursor-pointer flex-col items-center gap-3 px-8 py-5 outline-none transition-opacity delay-500 duration-700 ${revealed}`}
+        className={`group mt-10 flex cursor-pointer flex-col items-center gap-3 px-8 py-5 outline-none focus:outline-none focus-visible:!outline-none overflow-visible transition-opacity delay-500 duration-700 ${revealed}`}
       >
         {/* The root node, waiting — the web grows out of this circle. */}
-        <span className="block h-7 w-7 rounded-full bg-ink transition-transform duration-300 group-hover:scale-110 group-focus-visible:ring-2 group-focus-visible:ring-clay group-focus-visible:ring-offset-2" />
+        <span className="block h-7 w-7 rounded-full bg-ink transition-transform duration-300 group-hover:scale-110 group-focus-visible:ring-2 group-focus-visible:ring-clay group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-paper" />
         <span className="font-mono text-xs text-muted transition-colors group-hover:text-clay group-focus-visible:text-clay">
           click to launch ↵
         </span>
