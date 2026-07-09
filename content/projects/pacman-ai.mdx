@@ -1,0 +1,42 @@
+---
+title: Pacman AI Agents
+slug: pacman-ai
+category: research
+summary: Three generations of Pacman agents for CS 471 (Intro to AI) — graph search (DFS/BFS/UCS/A*) with custom heuristics, adversarial multi-agent search (minimax, alpha-beta, expectimax), and reinforcement learning.
+tags: [ai, python, algorithms]
+related: [knights-tour, echoai]
+year: 2025
+links:
+  repo: https://github.com/vikthebrik/CS471
+---
+
+{/* Imported draft from GitHub (CS471, Projects 1–3) — refine the prose and add media. */}
+
+## Overview
+
+The UC Berkeley Pacman projects, built across CS 471/571 (Introduction to Artificial
+Intelligence, Fall 2025) at the University of Oregon. One game, three escalating kinds of
+intelligence: first the agent plans paths through a known maze, then it reasons about
+adversaries it doesn't control, then it learns behavior from reward alone.
+
+## Project 1 — Search
+
+General search algorithms implemented in `search.py` and applied through search agents:
+depth-first, breadth-first, uniform-cost, and A*. The second half designs state
+representations and admissible heuristics — the four-corners problem and the
+eat-all-the-dots food heuristic — where the interesting work is keeping the heuristic
+consistent while still pruning enough of the space to matter. Built in a pair-programming
+split (alternating questions), with cross-review and the autograder as the gate before
+merging.
+
+## Project 2 — Multi-Agent Search
+
+Agents that reason about ghosts: a reflex agent with a tuned evaluation function, then
+minimax, alpha-beta pruning, and expectimax for stochastic opponents — culminating in a
+custom evaluation function balancing offense (eat dots, hunt scared ghosts) against
+survival.
+
+## Project 3 — Reinforcement Learning
+
+The reinforcement-learning suite: agents that learn policies from interaction with the
+environment rather than from a model given up front.
