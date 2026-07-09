@@ -1,13 +1,18 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { forceSimulation, forceCollide, type Simulation } from 'd3-force'
+import { forceSimulation, forceCollide, type Simulation, type ForceLink } from 'd3-force'
 import { select } from 'd3-selection'
 import { zoom as d3zoom, zoomIdentity, type ZoomBehavior } from 'd3-zoom'
 import { CATEGORIES, type Category } from '@/lib/categories'
-import { ROOT_ID, ABOUT_ID, type EdgeKind, type Graph, type GraphNode } from '@/lib/graph'
+import { ROOT_ID, ABOUT_ID, type EdgeKind, type Graph, type GraphNode, type GraphEdge } from '@/lib/graph'
 import { applyLayout, nodeRadius, type LayoutKind, type SimNode } from '@/lib/layouts'
 import { useGraphBridge, type Transform } from './GraphBridge'
+
+type SimLink = Omit<GraphEdge, 'source' | 'target'> & {
+  source: SimNode
+  target: SimNode
+}
 
 export const POSITIONS_KEY = 'portfolio:graph:positions:v1'
 
@@ -407,7 +412,7 @@ export function ForceGraph({
 
       // 3. Dynamic link force: during stage 1, only spoke edges (root -> hubs)
       // are active, so hubs can branch out of root without being pulled back by projects.
-      const linkForce = sim.force('link') as any
+      const linkForce = sim.force('link') as ForceLink<SimNode, SimLink> | undefined
       if (linkForce) {
         const linkStrengthScale =
           layoutRef.current === 'radial'
@@ -415,7 +420,7 @@ export function ForceGraph({
             : layoutRef.current === 'tree'
               ? 0.4
               : 1
-        linkForce.strength((e: any) => {
+        linkForce.strength((e) => {
           const kind = e.kind
           const weight = e.weight ?? 1
           if (intro < 2 && kind !== 'spoke') return 0
@@ -439,7 +444,7 @@ export function ForceGraph({
         'collide',
         forceCollide<SimNode>((n) => nodeRadius(n) + collisionPadding)
       )
-      const linkForce = sim.force('link') as any
+      const linkForce = sim.force('link') as ForceLink<SimNode, SimLink> | undefined
       if (linkForce) {
         const linkStrengthScale =
           layoutRef.current === 'radial'
@@ -447,7 +452,7 @@ export function ForceGraph({
             : layoutRef.current === 'tree'
               ? 0.4
               : 1
-        linkForce.strength((e: any) => (e.weight ?? 1) * linkStrengthScale)
+        linkForce.strength((e) => (e.weight ?? 1) * linkStrengthScale)
       }
     }
   }, [intro])

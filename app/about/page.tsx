@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { projects } from '#site/content'
-import { COURSEWORK, IDENTITY, LINKS } from '@/lib/links'
+import { COURSEWORK, LINKS } from '@/lib/links'
 
 export const metadata: Metadata = {
   title: 'About Vikram Thirumaran',
