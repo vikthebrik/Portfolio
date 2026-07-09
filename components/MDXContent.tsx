@@ -2,6 +2,7 @@ import * as runtime from 'react/jsx-runtime'
 import type { ComponentType } from 'react'
 import { Figure } from '@/components/mdx/Figure'
 import { Gallery } from '@/components/mdx/Gallery'
+import { VideoPreview } from '@/components/mdx/VideoPreview'
 
 /**
  * Renders a Velite-compiled MDX `body` (the function-source string emitted by
@@ -50,6 +51,7 @@ const components: Record<string, ComponentType<Record<string, unknown>>> = {
   // Media components for image-forward case studies (external URLs only).
   Figure: Figure as ComponentType<Record<string, unknown>>,
   Gallery: Gallery as ComponentType<Record<string, unknown>>,
+  VideoPreview: VideoPreview as ComponentType<Record<string, unknown>>,
 }
 
 export function MDXContent({ code }: { code: string }) {

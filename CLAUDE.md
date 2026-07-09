@@ -79,8 +79,15 @@ Git, builds, and deploys.
 - Images: store on a CDN/blob store (Vercel Blob, Cloudflare R2, or S3).
   Reference by URL in frontmatter (`cover`, `poster`). Serve through
   `next/image` with `remotePatterns` configured in `next.config.ts`.
-- Video: use a streaming host (Mux or Cloudflare Stream), not raw MP4 files.
-  Reference the playback URL in frontmatter (`video`).
+- Video (decided 2026-07): full videos live on **YouTube** (free streaming, zero
+  infra) and are never uploaded to Blob or the repo. On the site they're
+  represented by the **preview-loop pattern**: a short (~5s), silent, downscaled
+  (~480p, ~1–2MB) loop + poster frame on Blob act as the button; clicking swaps
+  in a `youtube-nocookie` embed in place (nothing from YouTube loads until then).
+  `npm run video:preview -- <file> --youtube <url>` (`scripts/video-preview.mjs`,
+  ffmpeg via the `ffmpeg-static` devDep) cuts, uploads, and prints a ready-to-paste
+  **`<VideoPreview>`** snippet (component in `components/mdx/`, registered in
+  `MDXContent.tsx`; respects reduced motion — poster instead of autoplaying loop).
 - Only small inline diagrams (<200KB, e.g. an architecture sketch) may live
   beside the MDX and be processed by Velite's `s.image()`.
 
