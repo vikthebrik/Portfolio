@@ -21,6 +21,7 @@ export function ViewControls({
   focusDim,
   onFocusDimChange,
   onResetPositions,
+  onReplayIntro,
 }: {
   layout: 'auto' | LayoutKind
   autoDefault: LayoutKind // what 'auto' resolves to for this content (always shown on the Auto chip)
@@ -32,6 +33,7 @@ export function ViewControls({
   focusDim: number
   onFocusDimChange: (value: number) => void
   onResetPositions: () => void
+  onReplayIntro: () => void
 }) {
   const [open, setOpen] = useState(false)
 
@@ -107,6 +109,13 @@ export function ViewControls({
             className="mt-1 w-full border border-line py-1 text-muted hover:text-clay"
           >
             reset positions
+          </button>
+          <button
+            type="button"
+            onClick={onReplayIntro}
+            className="mt-1 w-full border border-line py-1 text-muted hover:text-clay"
+          >
+            replay intro
           </button>
         </div>
       )}

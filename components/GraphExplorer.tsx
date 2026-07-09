@@ -106,6 +106,16 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
     ]
   }, [finishIntro])
 
+  // Replay the launch sequence on demand (view panel → "replay intro").
+  const replayIntro = useCallback(() => {
+    setCenter(null)
+    setQuery('')
+    setHint(false)
+    launched.current = false
+    setIntroActive(true)
+    setIntro(0)
+  }, [setCenter])
+
   // Clicks during the intro: on the launch screen they launch; mid-bloom they
   // fast-forward. The hint retires itself once the visitor does the thing it
   // teaches (or after a few quiet seconds).
@@ -292,6 +302,7 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
           focusDim={view.focusDim}
           onFocusDimChange={(val) => setView((v) => ({ ...v, focusDim: val }))}
           onResetPositions={resetPositions}
+          onReplayIntro={replayIntro}
           />
         </div>
         <ForceGraph

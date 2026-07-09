@@ -354,6 +354,34 @@ export function ForceGraph({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [center])
 
+  // Replay: when the intro restarts after being done (GraphExplorer's "replay
+  // intro"), re-gather the web at the launch spot and freeze again. Declared
+  // after the center effect so a replay from a re-rooted state re-anchors on
+  // root first. No-op on first load (the build effect already holds).
+  useEffect(() => {
+    const sim = simRef.current
+    const wrap = wrapRef.current
+    if (intro !== 0 || introHeld.current || !sim || !wrap) return
+    if (prefersReducedMotion()) return
+    const { w, h } = sizeRef.current
+    const rect = wrap.getBoundingClientRect()
+    const seed = {
+      x: clamp(window.innerWidth / 2 - rect.left, 0, w),
+      y: clamp(window.innerHeight / 2 - rect.top, 0, h),
+    }
+    introSeed.current = seed
+    for (const n of simNodesRef.current) {
+      if (n.fx != null && n.id !== ROOT_ID) continue
+      n.x = seed.x + (Math.random() - 0.5) * 60
+      n.y = seed.y + (Math.random() - 0.5) * 60
+    }
+    introHeld.current = true
+    sim.stop()
+    setTick((t) => t + 1)
+    publish()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [intro])
+
   // Pan/zoom on the svg; ignore events that start on a node so drag still works. The
   // full transform (translate + scale) is applied to the scene and published so the
   // minimap can draw the viewport box; the minimap drives pans back through `panHandler`.
@@ -584,6 +612,14 @@ export function ForceGraph({
     return n ? introFactor(n) : 1
   }
   const introClass = intro < 3 ? ' transition-opacity duration-700' : ''
+  // Per-node emergence delay (deterministic hash of the id) — with the budding
+  // scale below, each node divides into view on its own beat instead of the
+  // whole layer popping at once. Synthetic biology, not a slideshow.
+  const introDelay = (id: string) => {
+    let h = 0
+    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 997
+    return (h % 6) * 110
+  }
 
   const labelOpacity = (n: GraphNode) => {
     // Structural nodes are always labelled; project labels fade with zoom unless
@@ -635,6 +671,11 @@ export function ForceGraph({
                   style={{
                     strokeWidth: STROKE_WIDTH[e.kind],
                     opacity: opacity * Math.min(introOf(e.source), introOf(e.target)),
+                    // Edges surface after their endpoints have budded.
+                    transitionDelay:
+                      intro < 3
+                        ? `${200 + Math.max(introDelay(e.source), introDelay(e.target))}ms`
+                        : undefined,
                   }}
                 />
               )
@@ -664,7 +705,10 @@ export function ForceGraph({
                   data-node-id={n.id}
                   transform={`translate(${p?.x ?? 0},${p?.y ?? 0})`}
                   className={'cursor-pointer outline-none' + introClass}
-                  style={{ opacity: nodeOpacity(n) * introFactor(n) }}
+                  style={{
+                    opacity: nodeOpacity(n) * introFactor(n),
+                    transitionDelay: intro < 3 ? `${introDelay(n.id)}ms` : undefined,
+                  }}
                   onPointerDown={onNodePointerDown(n as SimNode)}
                   onPointerEnter={() => setHovered(n.id)}
                   onPointerLeave={() => setHovered((h) => (h === n.id ? null : h))}
@@ -684,7 +728,24 @@ export function ForceGraph({
                   {kbFocus === n.id && (
                     <circle r={r + 4} fill="none" strokeWidth={1.5} className="stroke-clay" />
                   )}
-                  <circle r={r} className={fill} />
+                  <circle
+                    r={r}
+                    className={fill}
+                    // Budding: each cell swells into place with a slight
+                    // overshoot, on the same per-node beat as its fade.
+                    style={
+                      intro < 3
+                        ? {
+                            transform: introFactor(n) ? 'scale(1)' : 'scale(0.2)',
+                            transformBox: 'fill-box',
+                            transformOrigin: 'center',
+                            transition:
+                              'transform 900ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+                            transitionDelay: `${introDelay(n.id)}ms`,
+                          }
+                        : undefined
+                    }
+                  />
                   <text
                     y={r + 11}
                     textAnchor="middle"

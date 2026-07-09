@@ -27,15 +27,15 @@ export const LAYOUTS: LayoutKind[] = ['web', 'radial', 'tree', 'cluster']
 export type SimNode = GraphNode & SimulationNodeDatum
 
 const LINK_DISTANCE: Record<EdgeKind, number> = {
-  spoke: 90,
-  membership: 70,
-  related: 120,
-  tag: 200,
+  spoke: 110,
+  membership: 95,
+  related: 150,
+  tag: 230,
 }
 
-const RING = 150 // radius added per layer (web/radial)
+const RING = 185 // radius added per layer (web/radial)
 const ROW = 130 // vertical gap per layer (tree)
-const CLUSTER_R = 220 // distance of each folder anchor from center (cluster)
+const CLUSTER_R = 250 // distance of each folder anchor from center (cluster)
 
 // Where a layout pins its center node. Exported so ForceGraph can tween the pin (and
 // the camera) toward the same point instead of letting the pin teleport it.
@@ -142,7 +142,7 @@ export function applyLayout(
       .distance((_l, i) => LINK_DISTANCE[edges[i].kind])
       .strength((_l, i) => edges[i].weight * linkStrengthScale),
   )
-  sim.force('collide', forceCollide<SimNode>((n) => nodeRadius(n) + 26))
+  sim.force('collide', forceCollide<SimNode>((n) => nodeRadius(n) + 36))
 
   // Clear positional forces; each layout re-adds only what it uses.
   sim.force('charge', null)
@@ -169,7 +169,7 @@ export function applyLayout(
     case 'web':
       // Centralized organic web: mild radial rings keep it centered on the center node,
       // links still bend it into a mesh. (This is the fix for the old "chain" layout.)
-      sim.force('charge', forceManyBody<SimNode>().strength(-420))
+      sim.force('charge', forceManyBody<SimNode>().strength(-560))
       sim.force(
         'radial',
         forceRadial<SimNode>((n) => depthOf(n) * RING, cx, cy).strength(0.18),
