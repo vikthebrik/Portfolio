@@ -36,8 +36,8 @@ test.describe('the graph', () => {
     // Focus moved to one of root's direct neighbors (a hub or how-it-works).
     const focused = page.locator('[data-node]:focus')
     await expect(focused).toHaveAttribute(
-      'aria-label',
-      /^(tech|design|drone|research|how it works)$/
+       'aria-label',
+       /^(tech|design|drone|research|about)$/
     )
 
     // Enter = click: a hub re-roots (?focus=), how-it-works routes to /about.

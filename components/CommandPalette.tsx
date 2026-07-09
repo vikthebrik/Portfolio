@@ -87,11 +87,11 @@ export function CommandPalette() {
         })
       ),
       {
-        id: 'how-it-works',
+        id: 'about',
         group: 'go',
-        label: 'how it works',
+        label: 'about',
         hint: '/about',
-        keywords: 'about colophon engineering',
+        keywords: 'about bio resume engineering colophon',
         run: () => go('/about'),
       },
       ...LINKS.map(

@@ -82,10 +82,10 @@ export function buildGraph(): Graph {
     })
   }
 
-  // 2. "How it works" structural node — the fifth spoke, routes to /about.
+  // 2. "About" structural node — the fifth spoke, routes to /about.
   nodeMap.set(ABOUT_ID, {
     id: ABOUT_ID,
-    label: 'how it works',
+    label: 'about',
     type: 'about',
     url: '/about',
     featured: false,

@@ -11,7 +11,7 @@ import { TOGGLE_TERMINAL_EVENT } from './CommandPalette'
 
 /**
  * A unix-style shell over the portfolio's content tree — the IDE-familiar way in.
- * Categories are directories, projects are .mdx files, `how-it-works.md` routes to
+ * Categories are directories, projects are .mdx files, `about.mdx` routes to
  * /about. Traversal only: ls/cd/pwd/tree/cat/open (+ help/clear/exit). `cd` into a
  * category re-roots the main graph through the bridge when it's on screen; `open`
  * navigates for real. Pulled up/down with ctrl+` (VS Code's binding) or the bottom-left
@@ -21,7 +21,7 @@ import { TOGGLE_TERMINAL_EVENT } from './CommandPalette'
  * app/layout.tsx so it persists across page navigations, like the minimap.
  */
 
-const HOW_IT_WORKS = 'how-it-works.md'
+const ABOUT_FILE = 'about.mdx'
 
 type FsFile = {
   name: string // e.g. "mcc-scheduler.mdx"
@@ -104,7 +104,7 @@ export function Terminal() {
       const [name] = stack
       if ((CATEGORIES as readonly string[]).includes(name))
         return { dir: name as Category }
-      if (name === HOW_IT_WORKS || name === 'how-it-works')
+      if (name === ABOUT_FILE || name === 'about' || name === 'about.mdx')
         return { dir: '', file: 'about' }
       const file = findFile('', name)
       return file ? { dir: '', file } : null
@@ -130,7 +130,7 @@ export function Terminal() {
   }
 
   const listDir = (dir: '' | Category): string[] => {
-    if (dir === '') return [...CATEGORIES.map((c) => `${c}/`), HOW_IT_WORKS]
+    if (dir === '') return [...CATEGORIES.map((c) => `${c}/`), ABOUT_FILE]
     return (fs.get(dir) ?? []).map((f) => f.name)
   }
 
@@ -152,14 +152,16 @@ export function Terminal() {
           'out',
           [
             'ls [path]        list directory',
-            'cd <path>        change directory (re-roots the graph when it is on screen)',
+            'cd <path>        change directory (re-roots the live graph)',
             'pwd              print working directory',
             'tree             the whole portfolio at a glance',
-            'cat <file>       peek at a project (frontmatter)',
-            'open <path>      open a project / category / how-it-works for real',
+            'cat <file>       peek at a project or about.mdx (frontmatter / bio summary)',
+            'open <path>      open a project / category / about.mdx for real',
             'contact          links: github, linkedin, resume, email',
             'clear            clear the scrollback',
             'exit             close the terminal (ctrl+` toggles it)',
+            '',
+            'Try: `cat about.mdx` to learn about me!',
           ].join('\n'),
         )
         break
@@ -170,7 +172,7 @@ export function Terminal() {
         if (target.file)
           return print(
             'out',
-            target.file === 'about' ? HOW_IT_WORKS : target.file.name,
+            target.file === 'about' ? ABOUT_FILE : target.file.name,
           )
         print('out', listDir(target.dir).join('\n'))
         break
@@ -198,7 +200,7 @@ export function Terminal() {
         break
 
       case 'tree': {
-        // how-it-works.md is always the final entry, so every category is `├──`.
+        // about.mdx is always the final entry, so every category is `├──`.
         const out: string[] = ['.']
         for (const c of CATEGORIES) {
           out.push(`├── ${c}/`)
@@ -207,7 +209,7 @@ export function Terminal() {
             out.push(`│   ${j === files.length - 1 ? '└──' : '├──'} ${f.name}`)
           })
         }
-        out.push(`└── ${HOW_IT_WORKS}`)
+        out.push(`└── ${ABOUT_FILE}`)
         print('out', out.join('\n'))
         break
       }
@@ -219,7 +221,26 @@ export function Terminal() {
         if (target.file === 'about')
           return print(
             'out',
-            'How this site works — content-derived graph, one MDX per project.\nRun `open how-it-works.md` for the full story.',
+            [
+              '---',
+              'title:   Vikram Thirumaran',
+              'role:    CS & Data Science Student @ UO',
+              'email:   vikramthirumaran@gmail.com',
+              'github:  github.com/vikthebrik',
+              '---',
+              'Vikram is a Computer Science & Data Science student at the University of Oregon',
+              'with experience in software engineering, quantitative methods consulting, and',
+              'HPC systems administration.',
+              '',
+              'Key Experience:',
+              '- UO Data Services: Quantitative Consultant (2026 - Present)',
+              '- UO Multicultural Center: External Lead (2024 - 2026)',
+              '- UO Research Advanced Computing Services: HPC Systems Administrator (2024 - 2025)',
+              '- Pinnacle Hoops: Co-Founder of 501(c)(3) nonprofit (raised $30,000)',
+              '',
+              'Run `open about.mdx` to see the full interactive page, including coursework',
+              'and details on how this website works!',
+            ].join('\n')
           )
         const f = target.file
         const links = Object.entries(f.links ?? {})

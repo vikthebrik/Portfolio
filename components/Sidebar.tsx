@@ -149,7 +149,7 @@ export function Sidebar({
         {!q && (
           <li className="mt-1">
             <Link href="/about" className="block pl-3 text-ink hover:text-clay">
-              how it works
+              about
             </Link>
           </li>
         )}
