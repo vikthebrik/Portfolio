@@ -1,0 +1,42 @@
+---
+title: Grid Stability ML Study
+slug: grid-stability-ml
+category: research
+summary: End-to-end ML study on the UCI Electrical Grid Stability dataset (10,000 simulated grid configurations, 12 features) — PCA + KMeans structure-finding, then a supervised classifier predicting whether a configuration stays stable.
+tags: [machine-learning, data-science, python, data-viz]
+related: [knights-tour, campus-safety-dispatch]
+year: 2026
+links:
+  repo: https://github.com/vikthebrik/DSCI372M
+---
+
+{/* Imported draft from GitHub (DSCI372M, Project 4) — refine the prose and add result figures. */}
+
+## Overview
+
+The capstone of DSCI 372M (Machine Learning for Data Science, Winter 2026): a
+choose-your-own-dataset project run end-to-end — dataset selection, preprocessing,
+unsupervised structure-finding, supervised modeling, and interpretation. The repo also
+holds the course's three earlier ML projects; this is the one that puts the pieces
+together. (Source lives under `Project4/` in the repo.)
+
+## The dataset
+
+The [UCI Electrical Grid Stability dataset](https://archive.ics.uci.edu/dataset/471/electrical+grid+stability+simulated+data)
+(ID 471): 10,000 simulated power-grid configurations, 12 features — reaction times
+(`tau1–tau4`), power balances (`p1–p4`), and price elasticities (`g1–g4`) — with a binary
+target, `stabf`, marking whether the configuration remains stable. Chosen from three
+candidate UCI datasets after a written evaluation of each (documented in the project
+plan): clean, no missing values, and framable as either classification or regression.
+
+## Approach
+
+- **Preprocess & split** — fetched programmatically via `ucimlrepo`, target extracted,
+  80/20 train/test split.
+- **Unsupervised** — features standardized, projected to two principal components, then
+  clustered with KMeans (k=3); scatter plots compare cluster assignments against the true
+  stability label, and the top-loading variables of each component identify which physical
+  parameters dominate the variance.
+- **Supervised** — a tree-based classifier predicting `stabf`, evaluated on accuracy and a
+  confusion matrix, with the model's structure read back against the goal: which grid
+  parameters actually decide stability.
