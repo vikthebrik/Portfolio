@@ -1,0 +1,38 @@
+---
+title: Talapas HPC Automation
+slug: talapas-hpc-automation
+category: research
+summary: Workflow automation for Talapas, the University of Oregon's heterogeneous HPC cluster — a Python tool that pulls pending account requests from the RACS Jira portal and routes each to the right PI for approval.
+tags: [python, automation, hpc]
+related: [grid-stability-ml, knights-tour]
+year: 2025
+links:
+  repo: https://github.com/vikthebrik/Xtra_Cur_Work
+---
+
+{/* Imported draft from GitHub (Xtra_Cur_Work/RACS) — refine as the RACS tooling grows; this node should evolve with the job. */}
+
+## Overview
+
+Work from my role as Student Administrator at Research Advanced Computer Services
+(RACS), the group that runs [Talapas](https://racs.uoregon.edu/services) — the
+University of Oregon's heterogeneous high-performance computing cluster. This is the
+infrastructure side of research: the tooling that keeps a shared cluster usable for the
+labs that depend on it. (Source lives under `RACS/` in the repo.)
+
+## Account-request automation
+
+New Talapas users request accounts through a portal backed by Jira, and each request
+needs sign-off from the PI of the research group (PIRG) the user claims. Doing that by
+hand means reading tickets, looking up PIs, and writing emails — one at a time.
+
+`automated_account_requests.py` automates the loop: it pulls pending account requests in
+bulk from the portal via the Jira API, resolves each requester to their PIRG, and emails
+the corresponding PI for approval. The script is deliberately environment-coupled — it
+assumes Talapas's directory structure and module setup — because it's an operational
+tool, not a library.
+
+## To be continued
+
+The repo is the growing home for cluster automation and utility scripts from the RACS
+role; this node will pick up new tools as they land.
