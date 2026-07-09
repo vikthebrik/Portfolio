@@ -10,6 +10,9 @@ export const IDENTITY = {
   role: 'CS + Data Science @ University of Oregon (class of 2027), minors in Math and Cognitive Science',
   // Short form for tight surfaces: the sidebar identity header + the launch intro.
   tagline: 'cs + data science @ oregon — tech · design · drone · research',
+  // The launch screen's two-line introduction (shown above "click to launch").
+  intro:
+    'CS + Data Science at the University of Oregon, class of 2027. I build software and ML studies, design for campus communities, and fly drones — and every piece of it links into one web.',
   email: 'vikramthirumaran@gmail.com',
 }
 

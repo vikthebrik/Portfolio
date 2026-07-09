@@ -150,15 +150,20 @@ instant state transitions).
 
 One always-visible web; navigation is emphasis + routing, not subgraph filtering:
 
-- **launch intro** — first visit each session (desktop only), the graph *assembles*
-  instead of appearing: the name types over blank paper (`IntroOverlay`), then the
-  sim — built frozen with every node gathered at the root — releases and the web
-  blooms out in layer waves (root+hubs, then projects + cross-links), chrome
-  (sidebar/nav/panel/minimap/terminal tab) fading in last, ending on a one-line hint
-  chip. Owned by `GraphExplorer` (stage timeline) + `lib/intro.ts` (skip predicate +
+- **launch intro** — first visit each session (desktop only), the landing is a
+  *launch screen*: the name types over blank paper, then the tagline, a two-line
+  introduction (`IDENTITY.intro`), and a root-node-shaped **click to launch** button
+  reveal (`IntroOverlay` — `fixed`, viewport-centered; centering in the pane reads
+  off-center because the hidden sidebar still reserves its column). It waits for the
+  click (button autofocused — Enter works; clicking anywhere launches): the sim —
+  built frozen with every node gathered at the button's spot — releases and the web
+  *grows out of the button*, the root's pin gliding to its pane anchor while nodes
+  fade in by layer waves and chrome (sidebar/nav/panel/minimap/terminal tab) arrives
+  last, ending on a one-line hint chip. Hidden chrome is `inert` during the intro.
+  Owned by `GraphExplorer` (launch + timed stages) + `lib/intro.ts` (skip predicate +
   a `useSyncExternalStore` store the global chrome subscribes to). Never a toll:
   reduced motion, mobile, `?focus=` deep links, and repeat visits (sessionStorage)
-  skip straight to the settled web; any click fast-forwards.
+  skip straight to the settled web; a click mid-bloom fast-forwards.
 - **overview** — the full web, rooted on `root`. No node is hidden.
 - **re-root** — clicking **any** node (a category hub *or* a project) makes it the new
   center: the layout reheats so the web rings by graph-distance *from it* (`applyLayout`'s

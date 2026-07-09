@@ -70,8 +70,13 @@ export function ForceGraph({
   const introRef = useRef(intro)
   introRef.current = intro
   // While true the sim is built but frozen: the launch intro seeds every node at
-  // the root and holds until stage 1, so the web blooms outward on release.
+  // the launch button's spot and holds until stage 1, so the web grows out of it.
   const introHeld = useRef(false)
+  // The bloom origin — the viewport center (where the launch button sits), in
+  // graph coordinates. The overlay is viewport-centered while the pane is not
+  // (the hidden sidebar still reserves its column), so this is what makes the
+  // web grow from the button instead of 144px to its right.
+  const introSeed = useRef<{ x: number; y: number } | null>(null)
   const rafPending = useRef(false)
   const transformRef = useRef<Transform>({ x: 0, y: 0, k: 1 })
   const zoomBehaviorRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null)
@@ -226,12 +231,18 @@ export function ForceGraph({
     } else {
       sim.on('tick', requestPaint)
       if (introRef.current < 3) {
-        // Launch intro: gather the (invisible) web at the root and freeze until
-        // stage 1 releases it — the bloom is the sim settling from this seed.
+        // Launch intro: gather the (invisible) web at the launch button and
+        // freeze until stage 1 — the growth is the sim settling from this seed.
+        const rect = wrap.getBoundingClientRect()
+        const seed = {
+          x: clamp(window.innerWidth / 2 - rect.left, 0, w),
+          y: clamp(window.innerHeight / 2 - rect.top, 0, h),
+        }
+        introSeed.current = seed
         for (const n of nodes) {
-          if (n.id === ROOT_ID || n.fx != null) continue
-          n.x = w / 2 + (Math.random() - 0.5) * 60
-          n.y = h / 2 + (Math.random() - 0.5) * 60
+          if (n.fx != null && n.id !== ROOT_ID) continue // hand pins stay put
+          n.x = seed.x + (Math.random() - 0.5) * 60
+          n.y = seed.y + (Math.random() - 0.5) * 60
         }
         introHeld.current = true
         sim.stop()
@@ -273,11 +284,27 @@ export function ForceGraph({
   }, [graph])
 
   // Release the held sim once the intro reaches stage 1 (or is skipped) — full
-  // alpha so the gathered nodes bloom out to the layout in one organic settle.
+  // alpha so the gathered nodes grow out to the layout in one organic settle.
+  // The root's pin travels from the launch button to its layout anchor (same
+  // glide the re-roots use), so the whole web visibly grows *from the button*
+  // and drifts into place as the chrome arrives.
   useEffect(() => {
     if (intro < 1 || !introHeld.current) return
     introHeld.current = false
-    simRef.current?.alpha(1).restart()
+    const sim = simRef.current
+    if (!sim) return
+    const root = simNodesRef.current.find((n) => n.id === ROOT_ID)
+    const seed = introSeed.current
+    if (root && seed) {
+      const anchor = {
+        x: root.fx ?? sizeRef.current.w / 2,
+        y: root.fy ?? sizeRef.current.h / 2,
+      }
+      root.x = seed.x
+      root.y = seed.y
+      glidePin(root, anchor)
+    }
+    sim.alpha(1).restart()
   }, [intro])
 
   // Re-run the layout when the user switches it — reheat, keep nodes + pins.

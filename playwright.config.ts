@@ -21,6 +21,9 @@ export default defineConfig({
   webServer: {
     command: 'npm run start',
     url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
+    // Never attach to a server we didn't start: a leftover `next start` keeps a
+    // stale build manifest after a rebuild (its chunks 500, hydration dies) and
+    // the suite silently tests old code. Fail loudly on an occupied port instead.
+    reuseExistingServer: false,
   },
 })

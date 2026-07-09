@@ -79,6 +79,9 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
     }
   }, [])
 
+  // Stage 0 is a *launch screen* — it holds until the visitor clicks (the
+  // button, or anywhere). Launching releases the frozen sim (stage 1: the web
+  // grows out of the button) and the rest of the sequence is timed.
   useEffect(() => {
     if (!shouldRunIntro()) {
       setIntro(INTRO_DONE)
@@ -86,21 +89,29 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
     }
     setIntroActive(true)
     setIntro(0)
-    introTimers.current = [
-      window.setTimeout(() => setIntro(1), 1600),
-      window.setTimeout(() => setIntro(2), 2500),
-      window.setTimeout(() => finishIntro(true), 3300),
-    ]
     return () => {
       for (const t of introTimers.current) window.clearTimeout(t)
       setIntroActive(false)
     }
+  }, [])
+
+  const launched = useRef(false)
+  const launch = useCallback(() => {
+    if (launched.current) return
+    launched.current = true
+    setIntro(1)
+    introTimers.current = [
+      window.setTimeout(() => setIntro(2), 900),
+      window.setTimeout(() => finishIntro(true), 1800),
+    ]
   }, [finishIntro])
 
-  // Any interaction fast-forwards the intro; the hint retires itself once the
-  // visitor does the thing it teaches (or after a few quiet seconds).
-  const skipIntro = () => {
-    if (intro < INTRO_DONE) finishIntro(false)
+  // Clicks during the intro: on the launch screen they launch; mid-bloom they
+  // fast-forward. The hint retires itself once the visitor does the thing it
+  // teaches (or after a few quiet seconds).
+  const onIntroPointerDown = () => {
+    if (intro === 0) launch()
+    else if (intro > 0 && intro < INTRO_DONE) finishIntro(false)
   }
   useEffect(() => {
     if (!hint) return
@@ -200,6 +211,10 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
           frames belong to the name and the blooming web. Desktop-only fade: on
           mobile the sidebar IS the interface and the intro never runs. */}
       <aside
+        // inert while invisible: the launch screen's only tabstop should be the
+        // launch button, not a column of hidden links. (0/1 are client-only
+        // stages — SSR renders -1, so no-JS readers get a live sidebar.)
+        inert={intro >= 0 && intro < 2 ? true : undefined}
         className={`flex shrink-0 flex-col overflow-auto border-line p-5 transition-opacity duration-700 md:w-72 md:border-r md:bg-surface/40 ${
           intro < 2 ? 'md:pointer-events-none md:opacity-0' : ''
         }`}
@@ -239,8 +254,11 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
         </footer>
       </aside>
 
-      <main className="relative hidden flex-1 md:block" onPointerDownCapture={skipIntro}>
-        <IntroOverlay stage={intro} />
+      <main
+        className="relative hidden flex-1 md:block"
+        onPointerDownCapture={onIntroPointerDown}
+      >
+        <IntroOverlay stage={intro} onLaunch={launch} />
         <div
           aria-hidden
           className={`pointer-events-none absolute bottom-6 left-1/2 z-10 -translate-x-1/2 border border-line bg-surface/90 px-3 py-1.5 font-mono text-xs text-muted transition-opacity duration-700 ${
@@ -250,6 +268,7 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
           click a node to re-center · ⌘k to jump
         </div>
         <div
+          inert={intro >= 0 && intro < 2 ? true : undefined}
           className={`transition-opacity duration-700 ${
             intro < 2 ? 'pointer-events-none opacity-0' : ''
           }`}
