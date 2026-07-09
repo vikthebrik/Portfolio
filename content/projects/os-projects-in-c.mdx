@@ -1,0 +1,40 @@
+---
+title: OS Projects in C
+slug: os-projects-in-c
+category: tech
+summary: Three systems projects from CS 415 (Operating Systems) — a pseudo-shell built on fork/exec, a process controller scheduling CPU- and I/O-bound workloads with signals, and the Duck Park concurrency simulation. All C, all valgrind-checked.
+tags: [c, systems, unix, concurrency, performance]
+related: [campus-safety-dispatch]
+year: 2025
+links:
+  repo: https://github.com/vikthebrik/CS415
+---
+
+{/* Imported draft from GitHub (CS415, projects 1–3) — refine the prose; the per-project report PDFs in the repo could become hosted Figures. */}
+
+## Overview
+
+The three programming projects from CS 415 (Operating Systems, Spring 2025) at the
+University of Oregon — the classic sequence where you stop calling the OS and start
+being it: process creation, scheduling, and synchronization, all in C against the raw
+POSIX API.
+
+## Project 1 — Pseudo-shell
+
+A miniature Unix shell: a hand-rolled tokenizer (`string_parser.c`) feeding a command
+layer that implements the core utilities, with both interactive and file-driven batch
+modes. The discipline is in the memory management — every path exercised under valgrind.
+
+## Project 2 — Process controller
+
+A controller that launches and time-slices a workload of CPU-bound and I/O-bound
+programs, built up across five parts — from forking and coordinating children to
+signal-driven scheduling (`SIGSTOP`/`SIGCONT`-style alarm handling) that multiplexes the
+processes and reports on their behavior. Each part ships with its valgrind log; the
+written report analyzes how the two workload types respond to scheduling.
+
+## Project 3 — Duck Park
+
+A themed concurrency simulation in three parts, coordinating concurrent actors with
+threads and synchronization primitives, with a written report (`Duck_Park_Report.pdf`)
+on the design and its correctness.
