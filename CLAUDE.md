@@ -60,7 +60,9 @@ Adding a project never touches component code.
 
 One connected web, built in `lib/graph.ts`:
 
-- **root** — the landing node (`id: root`, routes to `/`). Center of the web.
+- **root** — the landing node (`id: root`, routes to `/`). Center of the web, and it
+  carries the **name** (`IDENTITY.name`, lowercased): the center of the web is the
+  person. The sidebar's tree root stays `portfolio` (filesystem metaphor).
 - **five spokes** from root: the four category hubs + a **how it works** node
   (`id: how-it-works`, routes to `/about`). These are `spoke` edges.
 - **projects** hang off their category hub (`membership` edges).
@@ -129,8 +131,12 @@ style**, not ASCII:
   emphasizes matches. Clay marks only what's emphasized (the centered node included).
 
 The sidebar is a **clean names-only file tree** (project titles, no descriptions, no
-box-drawing glyphs) with a **search** box at its top. Resist adding color; the
-restraint is the point.
+box-drawing glyphs), led by a small **identity header** (name + `IDENTITY.tagline`),
+then the **search** box, then a **skills strip** — `#tag` chips auto-derived from tag
+frequency across projects (count ≥ 2, top 10). A chip is a canned search: clicking it
+drives the shared query, so the graph lights every project carrying that skill —
+proficiency shown as evidence, never meters. Resist adding color; the restraint is
+the point.
 
 (Pivoted 2026-06: away from the earlier full-ASCII treatment — bracket nodes,
 box-drawing sidebar, dashed line-art edges — toward this Obsidian-style graph.)
@@ -144,6 +150,15 @@ instant state transitions).
 
 One always-visible web; navigation is emphasis + routing, not subgraph filtering:
 
+- **launch intro** — first visit each session (desktop only), the graph *assembles*
+  instead of appearing: the name types over blank paper (`IntroOverlay`), then the
+  sim — built frozen with every node gathered at the root — releases and the web
+  blooms out in layer waves (root+hubs, then projects + cross-links), chrome
+  (sidebar/nav/panel/minimap/terminal tab) fading in last, ending on a one-line hint
+  chip. Owned by `GraphExplorer` (stage timeline) + `lib/intro.ts` (skip predicate +
+  a `useSyncExternalStore` store the global chrome subscribes to). Never a toll:
+  reduced motion, mobile, `?focus=` deep links, and repeat visits (sessionStorage)
+  skip straight to the settled web; any click fast-forwards.
 - **overview** — the full web, rooted on `root`. No node is hidden.
 - **re-root** — clicking **any** node (a category hub *or* a project) makes it the new
   center: the layout reheats so the web rings by graph-distance *from it* (`applyLayout`'s

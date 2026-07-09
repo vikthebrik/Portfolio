@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { projects } from '#site/content'
 import { CATEGORIES, type Category } from '@/lib/categories'
+import { useIntroActive } from '@/lib/intro'
 import { IDENTITY, LINKS } from '@/lib/links'
 import { useGraphBridge } from './GraphBridge'
 import { TOGGLE_TERMINAL_EVENT } from './CommandPalette'
@@ -40,6 +41,8 @@ export function Terminal() {
   const bridge = useGraphBridge()
 
   const [open, setOpen] = useState(false)
+  // The pull tab hides while the launch intro runs (like the minimap).
+  const introActive = useIntroActive()
   const [cwd, setCwd] = useState<'' | Category>('') // '' = root
   const [lines, setLines] = useState<Line[]>([])
   const [input, setInput] = useState('')
@@ -397,7 +400,12 @@ export function Terminal() {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="fixed bottom-4 left-4 z-20 border border-line bg-surface px-2.5 py-1.5 font-mono text-xs text-muted hover:text-clay"
+          className={
+            'fixed bottom-4 left-4 z-20 border border-line bg-surface px-2.5 py-1.5 font-mono text-xs text-muted hover:text-clay' +
+            (introActive
+              ? ' pointer-events-none opacity-0'
+              : ' transition-opacity duration-700')
+          }
           aria-label="Open terminal (ctrl+`)"
         >
           &gt;_ terminal <span className="text-faint">⌃`</span>

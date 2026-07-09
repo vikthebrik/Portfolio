@@ -1,5 +1,6 @@
 import { projects } from '#site/content'
 import { CATEGORIES, type Category } from '@/lib/categories'
+import { IDENTITY } from '@/lib/links'
 
 /**
  * The ONLY place nodes/edges are built. Keep this pure and deterministic.
@@ -47,10 +48,12 @@ export function buildGraph(): Graph {
   const nodeMap = new Map<string, GraphNode>()
   const edgeMap = new Map<string, GraphEdge>()
 
-  // 0. Root node — the landing, center of the web.
+  // 0. Root node — the landing, center of the web. The center of the web is
+  //    the person: the root carries the name (the sidebar tree keeps calling
+  //    its root directory `portfolio` — that's the filesystem metaphor).
   nodeMap.set(ROOT_ID, {
     id: ROOT_ID,
-    label: 'portfolio',
+    label: IDENTITY.name.toLowerCase(),
     type: 'root',
     url: '/',
     featured: false,

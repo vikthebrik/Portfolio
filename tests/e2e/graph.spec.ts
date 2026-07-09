@@ -9,7 +9,7 @@ test.describe('the graph', () => {
     const graph = page.getByRole('img', { name: /graph of projects/i })
     await expect(graph).toBeVisible()
 
-    await expect(graph.locator('[data-node][aria-label="portfolio"]')).toBeVisible()
+    await expect(graph.locator('[data-node][aria-label="vikram thirumaran"]')).toBeVisible()
     for (const hub of HUBS) {
       await expect(graph.locator(`[data-node][aria-label="${hub}"]`)).toBeVisible()
     }
@@ -30,7 +30,7 @@ test.describe('the graph', () => {
 
   test('arrow keys walk the edges; Enter activates', async ({ page }) => {
     await page.goto('/')
-    await page.locator('[data-node][aria-label="portfolio"]').focus()
+    await page.locator('[data-node][aria-label="vikram thirumaran"]').focus()
     await page.keyboard.press('ArrowRight')
 
     // Focus moved to one of root's direct neighbors (a hub or how-it-works).
@@ -70,6 +70,21 @@ test.describe('the sidebar', () => {
       await expect(page.locator('aside').getByRole('link', { name: label })).toBeVisible()
     }
   })
+
+  test('identity header + skill chips (chips drive the shared query)', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.locator('aside')).toContainText('vikram thirumaran')
+
+    const tree = page.getByRole('navigation', { name: 'Project tree' })
+    await page.locator('aside').getByRole('button', { name: '#python' }).click()
+    await expect(page.getByRole('searchbox', { name: 'Search projects' })).toHaveValue('python')
+    await expect(tree.getByRole('link', { name: /knight/i })).toBeVisible()
+    await expect(tree.getByRole('link', { name: 'MCC Scheduler' })).toBeHidden()
+
+    // Clicking the active chip clears the filter.
+    await page.locator('aside').getByRole('button', { name: '#python' }).click()
+    await expect(tree.getByRole('link', { name: 'MCC Scheduler' })).toBeVisible()
+  })
 })
 
 test.describe('the terminal', () => {
@@ -99,8 +114,12 @@ test.describe('the command palette', () => {
 
   test('works from a detail page and re-roots via deep link', async ({ page }) => {
     await page.goto('/work/mcc-scheduler')
-    await page.keyboard.press('ControlOrMeta+k')
     const palette = page.getByRole('dialog', { name: 'Command palette' })
+    // Re-press until the palette answers — the first ⌘K can race hydration.
+    await expect(async () => {
+      await page.keyboard.press('ControlOrMeta+k')
+      await expect(palette).toBeVisible({ timeout: 1000 })
+    }).toPass()
     await palette.getByRole('textbox').fill('design')
     await palette.getByRole('option').filter({ hasText: 're-root the web' }).first().click()
     await expect(page).toHaveURL(/\/\?focus=design/)

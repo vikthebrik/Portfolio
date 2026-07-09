@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { forceSimulation } from 'd3-force'
 import { ABOUT_ID, buildGraph, type GraphNode } from '@/lib/graph'
+import { useIntroActive } from '@/lib/intro'
 import {
   applyLayout,
   chooseDefaultLayout,
@@ -42,6 +43,11 @@ export function Minimap() {
   const bridge = useGraphBridge()
   const svgRef = useRef<SVGSVGElement>(null)
   const [collapsed, setCollapsed] = useState(false)
+  // Hidden while the launch intro runs — the first frames belong to the web.
+  const introActive = useIntroActive()
+  const introHide = introActive
+    ? ' pointer-events-none opacity-0'
+    : ' transition-opacity duration-700'
 
   const graph = useMemo(() => buildGraph(), [])
   const onMainPage = pathname === '/'
@@ -143,7 +149,10 @@ export function Minimap() {
       <button
         type="button"
         onClick={() => setCollapsed(false)}
-        className="fixed bottom-4 right-4 z-20 hidden border border-line bg-surface px-3 py-1 text-xs uppercase tracking-wide text-muted hover:text-clay md:block"
+        className={
+          'fixed bottom-4 right-4 z-20 hidden border border-line bg-surface px-3 py-1 text-xs uppercase tracking-wide text-muted hover:text-clay md:block' +
+          introHide
+        }
       >
         map ▾
       </button>
@@ -154,7 +163,12 @@ export function Minimap() {
     onMainPage && snapshot && fit ? viewportRect(snapshot, fit) : null
 
   return (
-    <div className="fixed bottom-4 right-4 z-20 hidden border border-line bg-surface md:block">
+    <div
+      className={
+        'fixed bottom-4 right-4 z-20 hidden border border-line bg-surface md:block' +
+        introHide
+      }
+    >
       <div className="flex items-center justify-between border-b border-line px-2 py-1 text-xs uppercase tracking-wide text-faint">
         <span>map</span>
         <button

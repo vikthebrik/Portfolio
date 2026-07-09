@@ -8,6 +8,8 @@
 export const IDENTITY = {
   name: 'Vikram Thirumaran',
   role: 'CS + Data Science @ University of Oregon (class of 2027), minors in Math and Cognitive Science',
+  // Short form for tight surfaces: the sidebar identity header + the launch intro.
+  tagline: 'cs + data science @ oregon — tech · design · drone · research',
   email: 'vikramthirumaran@gmail.com',
 }
 

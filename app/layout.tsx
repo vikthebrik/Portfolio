@@ -20,9 +20,9 @@ export const metadata: Metadata = {
   metadataBase: process.env.VERCEL_PROJECT_PRODUCTION_URL
     ? new URL(`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`)
     : new URL('http://localhost:3000'),
-  title: 'Portfolio — explorable work graph',
+  title: 'Vikram Thirumaran — explorable work graph',
   description:
-    'A CS/DSCI portfolio presented as a navigable force-directed network of projects.',
+    "Vikram Thirumaran's CS/DSCI portfolio — a navigable force-directed network of projects.",
   twitter: { card: 'summary_large_image' },
 }
 

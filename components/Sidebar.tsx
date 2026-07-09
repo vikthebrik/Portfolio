@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo } from 'react'
 import Link from 'next/link'
 import { CATEGORIES, type Category } from '@/lib/categories'
 import type { Graph, GraphNode } from '@/lib/graph'
@@ -28,6 +29,23 @@ export function Sidebar({
   activeSlug?: string
 }) {
   const q = query.trim().toLowerCase()
+
+  // Skills strip — the recurring tags across projects, straight from frontmatter
+  // (auto-derived, like everything else). Each chip is a canned search: clicking
+  // it drives the shared query, so the graph lights every project carrying the
+  // skill — proficiency shown as evidence, not claimed with meters.
+  const skills = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const n of graph.nodes) {
+      if (n.type !== 'project') continue
+      for (const t of n.tags ?? []) counts.set(t, (counts.get(t) ?? 0) + 1)
+    }
+    return [...counts.entries()]
+      .filter(([, c]) => c >= 2)
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 10)
+  }, [graph])
+
   const matches = (n: GraphNode) =>
     !q ||
     n.label.toLowerCase().includes(q) ||
@@ -55,6 +73,24 @@ export function Sidebar({
         aria-label="Search projects"
         className="mb-3 w-full border border-line bg-paper px-2 py-1 text-sm text-ink placeholder:text-faint"
       />
+
+      <div className="mb-3 flex flex-wrap gap-x-3 gap-y-0.5">
+        {skills.map(([tag, count]) => (
+          <button
+            key={tag}
+            type="button"
+            onClick={() => onQueryChange(q === tag ? '' : tag)}
+            aria-pressed={q === tag}
+            title={`${count} projects`}
+            className={
+              'font-mono text-xs leading-6 ' +
+              (q === tag ? 'text-clay' : 'text-faint hover:text-clay')
+            }
+          >
+            #{tag}
+          </button>
+        ))}
+      </div>
 
       <button
         type="button"

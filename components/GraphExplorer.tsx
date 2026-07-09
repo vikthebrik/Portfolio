@@ -5,10 +5,12 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { CATEGORIES, type Category } from '@/lib/categories'
 import { ROOT_ID, type Graph, type GraphNode } from '@/lib/graph'
-import { LINKS } from '@/lib/links'
+import { INTRO_DONE, INTRO_SEEN_KEY, setIntroActive, shouldRunIntro } from '@/lib/intro'
+import { IDENTITY, LINKS } from '@/lib/links'
 import { chooseDefaultLayout, type LayoutKind } from '@/lib/layouts'
 import { ForceGraph, POSITIONS_KEY } from './ForceGraph'
 import { useGraphBridge } from './GraphBridge'
+import { IntroOverlay } from './IntroOverlay'
 import { Sidebar } from './Sidebar'
 import { ViewControls } from './ViewControls'
 
@@ -56,6 +58,58 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
   const [query, setQuery] = useState('')
   const [remountKey, setRemountKey] = useState(0)
   const loaded = useRef(false)
+
+  // Launch intro (see lib/intro): -1 = pending (first client render, everything
+  // hidden — matches the SSR paint, so no hydration mismatch), then either the
+  // staged timeline (0 → 1 → 2 → 3) or a straight jump to done.
+  const [intro, setIntro] = useState(-1)
+  const introTimers = useRef<number[]>([])
+  const [hint, setHint] = useState(false)
+
+  const finishIntro = useCallback((showHint: boolean) => {
+    for (const t of introTimers.current) window.clearTimeout(t)
+    introTimers.current = []
+    setIntro(INTRO_DONE)
+    setIntroActive(false)
+    if (showHint) setHint(true)
+    try {
+      window.sessionStorage.setItem(INTRO_SEEN_KEY, '1')
+    } catch {
+      /* storage blocked — it'll just run again next load */
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!shouldRunIntro()) {
+      setIntro(INTRO_DONE)
+      return
+    }
+    setIntroActive(true)
+    setIntro(0)
+    introTimers.current = [
+      window.setTimeout(() => setIntro(1), 1600),
+      window.setTimeout(() => setIntro(2), 2500),
+      window.setTimeout(() => finishIntro(true), 3300),
+    ]
+    return () => {
+      for (const t of introTimers.current) window.clearTimeout(t)
+      setIntroActive(false)
+    }
+  }, [finishIntro])
+
+  // Any interaction fast-forwards the intro; the hint retires itself once the
+  // visitor does the thing it teaches (or after a few quiet seconds).
+  const skipIntro = () => {
+    if (intro < INTRO_DONE) finishIntro(false)
+  }
+  useEffect(() => {
+    if (!hint) return
+    const t = window.setTimeout(() => setHint(false), 7000)
+    return () => window.clearTimeout(t)
+  }, [hint])
+  useEffect(() => {
+    if (center || query) setHint(false)
+  }, [center, query])
 
   // Init from URL + localStorage after mount (avoids SSR/CSR hydration mismatch).
   useEffect(() => {
@@ -142,7 +196,22 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
 
   return (
     <div className="flex h-[100dvh] flex-col md:flex-row">
-      <aside className="flex shrink-0 flex-col overflow-auto border-line p-5 md:w-72 md:border-r md:bg-surface/40">
+      {/* Chrome (sidebar, nav, view panel) joins at intro stage 2 — the first
+          frames belong to the name and the blooming web. Desktop-only fade: on
+          mobile the sidebar IS the interface and the intro never runs. */}
+      <aside
+        className={`flex shrink-0 flex-col overflow-auto border-line p-5 transition-opacity duration-700 md:w-72 md:border-r md:bg-surface/40 ${
+          intro < 2 ? 'md:pointer-events-none md:opacity-0' : ''
+        }`}
+      >
+        <header className="mb-4">
+          <p className="font-mono text-sm text-ink">
+            {IDENTITY.name.toLowerCase()}
+          </p>
+          <p className="mt-1 font-mono text-xs leading-5 text-muted">
+            {IDENTITY.tagline}
+          </p>
+        </header>
         <p className="mb-3 text-xs uppercase tracking-wide text-faint">
           {centerNode ? `rooted · ${centerNode.label}` : 'overview'}
         </p>
@@ -170,9 +239,23 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
         </footer>
       </aside>
 
-      <main className="relative hidden flex-1 md:block">
-        <GraphNav graph={graph} center={center} onCenter={setCenter} />
-        <ViewControls
+      <main className="relative hidden flex-1 md:block" onPointerDownCapture={skipIntro}>
+        <IntroOverlay stage={intro} />
+        <div
+          aria-hidden
+          className={`pointer-events-none absolute bottom-6 left-1/2 z-10 -translate-x-1/2 border border-line bg-surface/90 px-3 py-1.5 font-mono text-xs text-muted transition-opacity duration-700 ${
+            hint ? 'opacity-100' : 'opacity-0'
+          }`}
+        >
+          click a node to re-center · ⌘k to jump
+        </div>
+        <div
+          className={`transition-opacity duration-700 ${
+            intro < 2 ? 'pointer-events-none opacity-0' : ''
+          }`}
+        >
+          <GraphNav graph={graph} center={center} onCenter={setCenter} />
+          <ViewControls
           layout={view.layout}
           autoDefault={autoDefault}
           onLayoutChange={(next) => setView((v) => ({ ...v, layout: next }))}
@@ -190,7 +273,8 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
           focusDim={view.focusDim}
           onFocusDimChange={(val) => setView((v) => ({ ...v, focusDim: val }))}
           onResetPositions={resetPositions}
-        />
+          />
+        </div>
         <ForceGraph
           key={remountKey}
           graph={graph}
@@ -200,6 +284,7 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
           focusDim={view.focusDim}
           center={center}
           query={query}
+          intro={intro}
           onActivateNode={activateNode}
         />
       </main>

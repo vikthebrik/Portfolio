@@ -44,6 +44,7 @@ export function ForceGraph({
   focusDim,
   center,
   query,
+  intro,
   onActivateNode,
 }: {
   graph: Graph
@@ -53,6 +54,7 @@ export function ForceGraph({
   focusDim: number // 0..1 — how hard non-cluster nodes fade during focus, per ring of distance
   center: string | null // the re-rooted node (null = root/overview): pinned + emphasized
   query: string // search — emphasize matching nodes, dim the rest
+  intro: number // launch stage (see lib/intro): -1 pending, 0 name, 1 hubs, 2 projects, 3 done
   onActivateNode: (node: GraphNode) => void
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -65,6 +67,11 @@ export function ForceGraph({
   layoutRef.current = layout
   const centerRef = useRef(center)
   centerRef.current = center
+  const introRef = useRef(intro)
+  introRef.current = intro
+  // While true the sim is built but frozen: the launch intro seeds every node at
+  // the root and holds until stage 1, so the web blooms outward on release.
+  const introHeld = useRef(false)
   const rafPending = useRef(false)
   const transformRef = useRef<Transform>({ x: 0, y: 0, k: 1 })
   const zoomBehaviorRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null)
@@ -218,6 +225,19 @@ export function ForceGraph({
       publish()
     } else {
       sim.on('tick', requestPaint)
+      if (introRef.current < 3) {
+        // Launch intro: gather the (invisible) web at the root and freeze until
+        // stage 1 releases it — the bloom is the sim settling from this seed.
+        for (const n of nodes) {
+          if (n.id === ROOT_ID || n.fx != null) continue
+          n.x = w / 2 + (Math.random() - 0.5) * 60
+          n.y = h / 2 + (Math.random() - 0.5) * 60
+        }
+        introHeld.current = true
+        sim.stop()
+        setTick((t) => t + 1)
+        publish()
+      }
     }
 
     const ro = new ResizeObserver(() => {
@@ -252,10 +272,18 @@ export function ForceGraph({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [graph])
 
+  // Release the held sim once the intro reaches stage 1 (or is skipped) — full
+  // alpha so the gathered nodes bloom out to the layout in one organic settle.
+  useEffect(() => {
+    if (intro < 1 || !introHeld.current) return
+    introHeld.current = false
+    simRef.current?.alpha(1).restart()
+  }, [intro])
+
   // Re-run the layout when the user switches it — reheat, keep nodes + pins.
   useEffect(() => {
     const sim = simRef.current
-    if (!sim) return
+    if (!sim || introHeld.current) return // mount-time run during the intro hold
     const { w, h } = sizeRef.current
     const edges = graph.edges.map((e) => ({ ...e }))
     applyLayout(sim, layout, { w, h, edges, centerId: centerRef.current })
@@ -275,7 +303,7 @@ export function ForceGraph({
   // nothing is filtered (CLAUDE.md "one living web"); only the anchor + emphasis change.
   useEffect(() => {
     const sim = simRef.current
-    if (!sim) return
+    if (!sim || introHeld.current) return // mount-time run during the intro hold
     const { w, h } = sizeRef.current
     const edges = graph.edges.map((e) => ({ ...e }))
     applyLayout(sim, layoutRef.current, { w, h, edges, centerId: center })
@@ -516,6 +544,20 @@ export function ForceGraph({
     return n ? baseOpacity(n) : 1
   }
 
+  // Launch intro: nodes join the web by layer — root+hubs at stage 1, projects
+  // (and with them the cross-link edges) at stage 2. Multiplies the normal
+  // opacity stack; a 700ms transition class (intro only) makes each wave a fade.
+  const introFactor = (n: GraphNode) => {
+    if (intro >= 2) return 1
+    if (intro === 1) return n.layer <= 1 ? 1 : 0
+    return 0
+  }
+  const introOf = (id: string) => {
+    const n = byId.get(id)
+    return n ? introFactor(n) : 1
+  }
+  const introClass = intro < 3 ? ' transition-opacity duration-700' : ''
+
   const labelOpacity = (n: GraphNode) => {
     // Structural nodes are always labelled; project labels fade with zoom unless
     // pinned/hovered/emphasized. Emphasis dimming applies via the group's opacity
@@ -532,7 +574,7 @@ export function ForceGraph({
         ref={svgRef}
         role="img"
         aria-label="Graph of projects. Use the sidebar to navigate."
-        className="h-full w-full touch-none"
+        className={`h-full w-full touch-none${intro < 2 ? ' pointer-events-none' : ''}`}
       >
         <g
           ref={sceneRef}
@@ -562,8 +604,11 @@ export function ForceGraph({
                   key={`${e.source}::${e.target}:${e.kind}`}
                   d={curve(s.x ?? 0, s.y ?? 0, t?.x ?? 0, t?.y ?? 0)}
                   fill="none"
-                  className={touchesFocal && on ? 'stroke-clay' : 'stroke-line'}
-                  style={{ strokeWidth: STROKE_WIDTH[e.kind], opacity }}
+                  className={(touchesFocal && on ? 'stroke-clay' : 'stroke-line') + introClass}
+                  style={{
+                    strokeWidth: STROKE_WIDTH[e.kind],
+                    opacity: opacity * Math.min(introOf(e.source), introOf(e.target)),
+                  }}
                 />
               )
             })}
@@ -591,8 +636,8 @@ export function ForceGraph({
                   data-node
                   data-node-id={n.id}
                   transform={`translate(${p?.x ?? 0},${p?.y ?? 0})`}
-                  className="cursor-pointer outline-none"
-                  style={{ opacity: nodeOpacity(n) }}
+                  className={'cursor-pointer outline-none' + introClass}
+                  style={{ opacity: nodeOpacity(n) * introFactor(n) }}
                   onPointerDown={onNodePointerDown(n as SimNode)}
                   onPointerEnter={() => setHovered(n.id)}
                   onPointerLeave={() => setHovered((h) => (h === n.id ? null : h))}
