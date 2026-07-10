@@ -1,37 +1,33 @@
 'use client'
 
 import { useState } from 'react'
-import { CATEGORIES, type Category } from '@/lib/categories'
 import { LAYOUTS, type LayoutKind } from '@/lib/layouts'
 
 /**
- * Obsidian-style view panel (part 1): layout selector + opacity. Root & hubs are always
- * on, so opacity only exposes projects (one slider) and per-folder muting. Everything
- * here is a manual override on top of the dynamic defaults — state + persistence live in
- * GraphExplorer. Collapsible so it stays out of the way. Tokens + mono only.
+ * Obsidian-style view panel: layout selector + display toggles. The old opacity/fade
+ * sliders are gone — projects opacity and focus fade are fixed constants in ForceGraph;
+ * the toggles are the remaining experiments (quiet labels, muted edges) kept switchable
+ * until a winner is baked in. State + persistence live in GraphExplorer. Collapsible so
+ * it stays out of the way. Tokens + mono only.
  */
 export function ViewControls({
   layout,
   autoDefault,
   onLayoutChange,
-  projectOpacity,
-  onProjectOpacityChange,
-  folderOpacity,
-  onFolderChange,
-  focusDim,
-  onFocusDimChange,
+  quietLabels,
+  onQuietLabelsChange,
+  muteEdges,
+  onMuteEdgesChange,
   onResetPositions,
   onReplayIntro,
 }: {
   layout: 'auto' | LayoutKind
   autoDefault: LayoutKind // what 'auto' resolves to for this content (always shown on the Auto chip)
   onLayoutChange: (next: 'auto' | LayoutKind) => void
-  projectOpacity: number
-  onProjectOpacityChange: (value: number) => void
-  folderOpacity: Record<Category, number>
-  onFolderChange: (category: Category, value: number) => void
-  focusDim: number
-  onFocusDimChange: (value: number) => void
+  quietLabels: boolean
+  onQuietLabelsChange: (value: boolean) => void
+  muteEdges: boolean
+  onMuteEdgesChange: (value: boolean) => void
   onResetPositions: () => void
   onReplayIntro: () => void
 }) {
@@ -75,32 +71,19 @@ export function ViewControls({
             </div>
           </Section>
 
-          <Section label="opacity · projects">
-            <Slider
-              label="projects"
-              value={projectOpacity}
-              onChange={onProjectOpacityChange}
+          <Section label="display">
+            <Toggle
+              label="quiet labels"
+              hint="project names appear on zoom or focus"
+              checked={quietLabels}
+              onChange={onQuietLabelsChange}
             />
-            <p className="mt-1 text-faint">root &amp; hubs are always on</p>
-          </Section>
-
-          <Section label="focus">
-            <Slider label="fade" value={focusDim} onChange={onFocusDimChange} />
-            <p className="mt-1 text-faint">
-              how hard the rest fades when a node is centered — falls off per ring of
-              distance, so peers stay visible
-            </p>
-          </Section>
-
-          <Section label="opacity · folder">
-            {CATEGORIES.map((cat) => (
-              <Slider
-                key={cat}
-                label={cat}
-                value={folderOpacity[cat] ?? 1}
-                onChange={(v) => onFolderChange(cat, v)}
-              />
-            ))}
+            <Toggle
+              label="muted edges"
+              hint="resting links stay faint until emphasized"
+              checked={muteEdges}
+              onChange={onMuteEdgesChange}
+            />
           </Section>
 
           <button
@@ -138,31 +121,34 @@ function Section({
   )
 }
 
-function Slider({
+function Toggle({
   label,
-  value,
+  hint,
+  checked,
   onChange,
 }: {
   label: string
-  value: number
-  onChange: (value: number) => void
+  hint: string
+  checked: boolean
+  onChange: (value: boolean) => void
 }) {
   return (
-    <label className="flex items-center gap-2 py-0.5">
-      <span className="w-14 shrink-0 text-muted">{label}</span>
-      <input
-        type="range"
-        min={0}
-        max={1}
-        step={0.05}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="h-1 min-w-0 flex-1 accent-clay"
-        aria-label={`${label} opacity`}
-      />
-      <span className="w-9 shrink-0 text-right tabular-nums text-faint">
-        {value.toFixed(2)}
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      aria-pressed={checked}
+      className="flex w-full items-baseline gap-2 py-0.5 text-left"
+    >
+      <span
+        className={
+          'shrink-0 border px-1.5 ' +
+          (checked ? 'border-clay text-clay' : 'border-line text-faint')
+        }
+      >
+        {checked ? 'on' : 'off'}
       </span>
-    </label>
+      <span className="text-muted">{label}</span>
+      <span className="min-w-0 flex-1 truncate text-right text-faint">{hint}</span>
+    </button>
   )
 }

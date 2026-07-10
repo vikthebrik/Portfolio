@@ -17,6 +17,7 @@ import { useGraphBridge } from './GraphBridge'
  */
 
 export const TOGGLE_TERMINAL_EVENT = 'portfolio:toggle-terminal'
+export const TOGGLE_PALETTE_EVENT = 'portfolio:toggle-palette'
 
 type Item = {
   id: string
@@ -131,7 +132,9 @@ export function CommandPalette() {
     })
   }, [items, query])
 
-  // ⌘K / ctrl+K from anywhere; Escape closes.
+  // ⌘K / ctrl+K from anywhere; Escape closes. A visible trigger (e.g. the
+  // sidebar's ⌘k button, for mobile taps where there's no keyboard) dispatches
+  // the same open/close via TOGGLE_PALETTE_EVENT.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
@@ -143,8 +146,17 @@ export function CommandPalette() {
         setOpen(false)
       }
     }
+    const onToggle = () => {
+      setOpen((o) => !o)
+      setQuery('')
+      setSelected(0)
+    }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener(TOGGLE_PALETTE_EVENT, onToggle)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener(TOGGLE_PALETTE_EVENT, onToggle)
+    }
   }, [])
 
   useEffect(() => {

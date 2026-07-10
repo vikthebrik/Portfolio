@@ -121,10 +121,13 @@ style**, not ASCII:
   degree bump for projects) with the **title only** beneath — no `[ brackets ]`, no
   summary on the node.
 - **Root, hubs, and how-it-works are always on**: fixed full opacity and always
-  labelled — the structural skeleton never fades. The opacity controls (projects
-  slider × folder sliders) only dim *projects*.
+  labelled — the structural skeleton never fades. Projects rest at a fixed calmer
+  base (`PROJECT_OPACITY` 0.55 in `ForceGraph.tsx`); there are no opacity sliders
+  (removed 2026-07 — the panel is toggles only).
 - Project labels **fade in/out with zoom** (a `pinned`, hovered, or search-matched
-  project always shows its label).
+  project always shows its label). With the **quiet labels** toggle (default on),
+  project labels are fully hidden at the resting zoom — only the structural
+  skeleton is named until you zoom in or emphasize a cluster.
 - Links are **soft curved** paths (quadratic bézier), not dashed line-art.
 - **Hover** highlights a node's connections and dims the rest; **re-root** (clicking any
   node) recenters the web on it and fades/minimizes the unrelated nodes; **search**
@@ -236,16 +239,19 @@ Auto-derivation is the default; these let a human override it:
 - `pinned` frontmatter — force-show (today: label always visible; later: survives filters).
 - **Layout** — the view panel picks a layout: `auto` (content-based default) or a manual
   override (`web` / `radial` / `tree` / `cluster`). Persisted in `view:v1` (below).
-- **Opacity** — root/hubs/how-it-works are always on; a project's opacity is
-  `projectOpacity × folderOpacity[category]` (one projects slider + four folder sliders).
-  This is how the graph reads as deliberate layers without hiding the structure.
-  Persisted in `view:v1`.
-- **Focus fade** (`focusDim`, slider in the view panel) — how hard non-cluster nodes fade
-  during focus/hover: the multiplier is `(1 - focusDim)^rings` by BFS distance from the
-  focal node (floor 0.05), so with the default 0.6 a centered hub keeps its peers at 0.4
-  while their projects recede to ~0.16. 0 = no fade; 1 = the old hard dim. Search uses a
-  flat two-ring dim (matches are scattered; distance is meaningless). Persisted in
-  `view:v1`.
+- **Opacity & focus fade are fixed, not sliders** (removed 2026-07): root/hubs/
+  how-it-works are always on; projects rest at `PROJECT_OPACITY` (0.55) and focus
+  fade is `FOCUS_DIM` (0.85), both constants in `ForceGraph.tsx`. The fade multiplier
+  is `(1 - FOCUS_DIM)^rings` by BFS distance from the focal node (floor 0.05) — at
+  0.85 the first off-cluster ring drops to 0.15, a hard spotlight. Search uses a flat
+  two-ring dim (matches are scattered; distance is meaningless). The view-state loader
+  picks fields explicitly, so stale slider values in old `view:v1` storage are ignored.
+- **Display toggles** (view panel, both default **on**, persisted in `view:v1`) — the
+  current declutter experiments, kept switchable until a winner is baked in:
+  **quiet labels** (project labels hidden at resting zoom; appear on zoom-in/hover/
+  focus/search/pin) and **muted edges** (resting edges drop to a faint constellation —
+  tag 0.18 / related 0.3 / structural 0.4 vs the louder 0.5/0.8 — regaining strength
+  only on the emphasized cluster).
 - **Hand-dragged node positions** — dragging a node pins it (`fx/fy`) and persists to
   `localStorage['portfolio:graph:positions:v1']` as `{ [id]: {x, y} }`, reapplied on
   load. Pins win over the layout (the ultimate override); switching layout only
@@ -276,13 +282,14 @@ shows this pick; a manual choice overrides the render but not the chip.
 ## View controls (panel — part 1 built, rest deferred)
 
 `components/ViewControls.tsx` — a collapsible Obsidian-like panel, persisted to
-`localStorage['portfolio:graph:view:v1']` (`{ layout, projectOpacity, folderOpacity }`).
+`localStorage['portfolio:graph:view:v1']` (`{ layout, quietLabels, muteEdges }`).
 
-- **Built:** the layout selector (auto + manual); the opacity sliders (one `projects`
-  slider + four folder sliders — root/hubs are always on) plus "reset positions". Search
-  lives in the sidebar (not this panel); the minimap is its own persistent component.
-- **Still deferred (next pass):** sliders for repel force / link distance / center force;
-  node-size scaling; label-fade threshold; category/tag filters; toggle tag-edges;
+- **Built:** the layout selector (auto + manual); the two display toggles (quiet
+  labels / muted edges — see Manual control) plus "reset positions" and "replay
+  intro". The opacity/fade sliders were removed 2026-07 in favor of fixed constants;
+  keep the panel toggles-and-chips only — no sliders. Search lives in the sidebar
+  (not this panel); the minimap is its own persistent component.
+- **Still deferred (next pass):** category/tag filters; toggle tag-edges;
   show/hide orphans. Persist all to `localStorage`.
 
 ## Repo conventions

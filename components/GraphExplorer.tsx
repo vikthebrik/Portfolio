@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { CATEGORIES, type Category } from '@/lib/categories'
 import { ROOT_ID, type Graph, type GraphNode } from '@/lib/graph'
 import { INTRO_DONE, INTRO_SEEN_KEY, setIntroActive, shouldRunIntro } from '@/lib/intro'
 import { IDENTITY, LINKS } from '@/lib/links'
 import { chooseDefaultLayout, type LayoutKind } from '@/lib/layouts'
+import { useIsMobile } from '@/lib/viewport'
+import { TOGGLE_PALETTE_EVENT } from './CommandPalette'
 import { ForceGraph, POSITIONS_KEY } from './ForceGraph'
 import { useGraphBridge } from './GraphBridge'
 import { IntroOverlay } from './IntroOverlay'
@@ -27,19 +28,14 @@ const VIEW_KEY = 'portfolio:graph:view:v1'
 
 type ViewState = {
   layout: 'auto' | LayoutKind
-  projectOpacity: number // root/hubs always on; only projects are dimmable
-  folderOpacity: Record<Category, number>
-  focusDim: number // 0..1 — per-ring fade of non-cluster nodes during focus/hover
+  quietLabels: boolean // hide project labels at overview zoom (appear on zoom/hover/focus)
+  muteEdges: boolean // resting edges stay faint until a cluster is emphasized
 }
 
 const defaultView = (): ViewState => ({
   layout: 'auto',
-  projectOpacity: 0.55, // projects recede by default → calmer overview
-  folderOpacity: Object.fromEntries(CATEGORIES.map((c) => [c, 1])) as Record<
-    Category,
-    number
-  >,
-  focusDim: 0.6, // same-ring peers stay readable; each further ring fades harder
+  quietLabels: true,
+  muteEdges: true,
 })
 
 /**
@@ -48,11 +44,12 @@ const defaultView = (): ViewState => ({
  * it, glides the camera to frame it) and softly emphasizes its cluster — the rest fades
  * but stays on screen (no filtering). `center` is synced to the URL as `?focus=<id>`, so
  * browser Back/Forward (and the in-graph ‹ › buttons) traverse the history for free.
- * `view` (layout + per-project opacity) persists to localStorage.
+ * `view` (layout + display toggles) persists to localStorage.
  */
 export function GraphExplorer({ graph }: { graph: Graph }) {
   const router = useRouter()
   const bridge = useGraphBridge()
+  const isMobile = useIsMobile()
   const [center, setCenterState] = useState<string | null>(null)
   const [view, setView] = useState<ViewState>(defaultView)
   const [query, setQuery] = useState('')
@@ -148,7 +145,17 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
     window.addEventListener('popstate', onPop)
     try {
       const saved = window.localStorage.getItem(VIEW_KEY)
-      if (saved) setView({ ...defaultView(), ...JSON.parse(saved) })
+      if (saved) {
+        // Pick fields explicitly: stale keys from the old slider era (opacity,
+        // focusDim) must not shadow the now-fixed view tuning.
+        const parsed = JSON.parse(saved) as Partial<ViewState>
+        const d = defaultView()
+        setView({
+          layout: parsed.layout ?? d.layout,
+          quietLabels: parsed.quietLabels ?? d.quietLabels,
+          muteEdges: parsed.muteEdges ?? d.muteEdges,
+        })
+      }
     } catch {
       /* ignore malformed storage */
     }
@@ -231,15 +238,30 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
           intro < 2 ? 'md:pointer-events-none md:opacity-0' : ''
         }`}
       >
-        <header className="mb-4">
-          <p className="font-mono text-sm text-ink">
-            {IDENTITY.name.toLowerCase()}
-          </p>
-          <p className="mt-1 font-mono text-xs leading-5 text-muted">
-            {IDENTITY.tagline}
-          </p>
+        <header className="mb-4 flex items-start justify-between gap-2">
+          <div>
+            <p className="font-mono text-sm text-ink">
+              {IDENTITY.name.toLowerCase()}
+            </p>
+            <p className="mt-1 font-mono text-xs leading-5 text-muted">
+              {IDENTITY.tagline}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event(TOGGLE_PALETTE_EVENT))}
+            aria-label="Open command palette"
+            className="shrink-0 border border-line px-2 py-1 font-mono text-xs text-muted hover:text-clay"
+          >
+            ⌘k
+          </button>
         </header>
-        <p className="mb-3 text-xs uppercase tracking-wide text-faint">
+        {/* Mobile: the graph pane is hidden, so back/forward + breadcrumb live
+            here instead — the only place they'd otherwise be unreachable. */}
+        <div className="mb-3 flex flex-wrap items-center gap-3 border-b border-line pb-3 md:hidden">
+          <BackForwardCrumb graph={graph} center={center} onCenter={setCenter} />
+        </div>
+        <p className="mb-3 hidden text-xs uppercase tracking-wide text-faint md:block">
           {centerNode ? `rooted · ${centerNode.label}` : 'overview'}
         </p>
         <Sidebar
@@ -290,35 +312,31 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
           layout={view.layout}
           autoDefault={autoDefault}
           onLayoutChange={(next) => setView((v) => ({ ...v, layout: next }))}
-          projectOpacity={view.projectOpacity}
-          onProjectOpacityChange={(val) =>
-            setView((v) => ({ ...v, projectOpacity: val }))
+          quietLabels={view.quietLabels}
+          onQuietLabelsChange={(val) =>
+            setView((v) => ({ ...v, quietLabels: val }))
           }
-          folderOpacity={view.folderOpacity}
-          onFolderChange={(cat, val) =>
-            setView((v) => ({
-              ...v,
-              folderOpacity: { ...v.folderOpacity, [cat]: val },
-            }))
-          }
-          focusDim={view.focusDim}
-          onFocusDimChange={(val) => setView((v) => ({ ...v, focusDim: val }))}
+          muteEdges={view.muteEdges}
+          onMuteEdgesChange={(val) => setView((v) => ({ ...v, muteEdges: val }))}
           onResetPositions={resetPositions}
           onReplayIntro={replayIntro}
           />
         </div>
-        <ForceGraph
-          key={remountKey}
-          graph={graph}
-          layout={resolvedLayout}
-          projectOpacity={view.projectOpacity}
-          folderOpacity={view.folderOpacity}
-          focusDim={view.focusDim}
-          center={center}
-          query={query}
-          intro={intro}
-          onActivateNode={activateNode}
-        />
+        {/* <main> is already hidden below md; skip mounting the simulation
+            entirely on mobile so its rAF tick loop doesn't run while invisible. */}
+        {!isMobile && (
+          <ForceGraph
+            key={remountKey}
+            graph={graph}
+            layout={resolvedLayout}
+            quietLabels={view.quietLabels}
+            muteEdges={view.muteEdges}
+            center={center}
+            query={query}
+            intro={intro}
+            onActivateNode={activateNode}
+          />
+        )}
       </main>
     </div>
   )
@@ -328,25 +346,24 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
  * Back/forward + breadcrumb for the re-root history. Back/forward just drive the browser
  * history (Back/Forward keys work identically); the crumb shows the current root and,
  * when a project is centered, an explicit "open" affordance into its case study (since a
- * single click centers rather than opens).
+ * single click centers rather than opens). No positioning classes of its own — callers
+ * (the desktop floating GraphNav, and the mobile crumb inside <aside>) wrap it differently.
  */
-function GraphNav({
+function BackForwardCrumb({
   graph,
   center,
   onCenter,
-  onReplayIntro,
 }: {
   graph: Graph
   center: string | null
   onCenter: (id: string | null) => void
-  onReplayIntro: () => void
 }) {
   const node = center ? (graph.nodes.find((n) => n.id === center) ?? null) : null
   const crumb = 'font-mono text-xs'
   const btn = 'text-muted hover:text-clay'
 
   return (
-    <div className="pointer-events-auto absolute left-4 top-4 z-10 flex items-center gap-3 border border-line bg-surface/90 px-2.5 py-1.5 backdrop-blur-sm">
+    <>
       <div className="flex items-center gap-1">
         <button
           type="button"
@@ -366,7 +383,7 @@ function GraphNav({
         </button>
       </div>
 
-      <div className={`${crumb} flex items-center gap-1`}>
+      <div className={`${crumb} flex flex-wrap items-center gap-1`}>
         <button type="button" onClick={() => onCenter(null)} className={btn}>
           overview
         </button>
@@ -402,6 +419,25 @@ function GraphNav({
           open ↵
         </Link>
       )}
+    </>
+  )
+}
+
+/** Desktop-only floating wrapper around BackForwardCrumb, plus the replay-intro control. */
+function GraphNav({
+  graph,
+  center,
+  onCenter,
+  onReplayIntro,
+}: {
+  graph: Graph
+  center: string | null
+  onCenter: (id: string | null) => void
+  onReplayIntro: () => void
+}) {
+  return (
+    <div className="pointer-events-auto absolute left-4 top-4 z-10 flex items-center gap-3 border border-line bg-surface/90 px-2.5 py-1.5 backdrop-blur-sm">
+      <BackForwardCrumb graph={graph} center={center} onCenter={onCenter} />
 
       <div className="h-3 w-px bg-line" />
       <button

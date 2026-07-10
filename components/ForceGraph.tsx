@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { forceSimulation, forceCollide, type Simulation, type ForceLink } from 'd3-force'
 import { select } from 'd3-selection'
 import { zoom as d3zoom, zoomIdentity, type ZoomBehavior } from 'd3-zoom'
-import { CATEGORIES, type Category } from '@/lib/categories'
+import { CATEGORIES } from '@/lib/categories'
 import { ROOT_ID, ABOUT_ID, type EdgeKind, type Graph, type GraphNode, type GraphEdge } from '@/lib/graph'
 import { applyLayout, nodeRadius, type LayoutKind, type SimNode } from '@/lib/layouts'
 import { useGraphBridge, type Transform } from './GraphBridge'
@@ -23,6 +23,11 @@ const STROKE_WIDTH: Record<EdgeKind, number> = {
   tag: 0.75,
 }
 
+// Fixed view tuning (the old sliders, now baked in): projects rest at a calm
+// mid-opacity, and focus fades non-cluster nodes hard per ring of distance.
+const PROJECT_OPACITY = 1
+const FOCUS_DIM = 0.85
+
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -38,15 +43,15 @@ const easeInOutCubic = (p: number) =>
 /**
  * Obsidian-style force graph. Layout comes from `lib/layouts` (swappable force
  * configs; the sim reheats without rebuilding, so drags survive). Node opacity is
- * layered: depth-ring × folder, then dimmed further by hover/soft-focus emphasis.
+ * layered: a fixed resting base by node type, then dimmed further by hover/soft-focus
+ * emphasis (per ring of graph-distance).
  * State-driven render (cheap at ~12 nodes) so all that styling composes.
  */
 export function ForceGraph({
   graph,
   layout,
-  projectOpacity,
-  folderOpacity,
-  focusDim,
+  quietLabels,
+  muteEdges,
   center,
   query,
   intro,
@@ -54,9 +59,8 @@ export function ForceGraph({
 }: {
   graph: Graph
   layout: LayoutKind
-  projectOpacity: number // root/hubs are always on; only projects are dimmable
-  folderOpacity: Record<Category, number>
-  focusDim: number // 0..1 — how hard non-cluster nodes fade during focus, per ring of distance
+  quietLabels: boolean // project labels hidden at overview zoom; appear on zoom-in/hover/focus
+  muteEdges: boolean // resting edges read as a faint constellation until a cluster is emphasized
   center: string | null // the re-rooted node (null = root/overview): pinned + emphasized
   query: string // search — emphasize matching nodes, dim the rest
   intro: number // launch stage (see lib/intro): -1 pending, 0 name, 1 hubs, 2 projects, 3 done
@@ -719,7 +723,7 @@ export function ForceGraph({
 
   // De-emphasis falls off with graph-distance from the focal node, so same-ring nodes
   // (e.g. the other hubs when a hub is centered) stay readable while far nodes recede.
-  // `focusDim` is the slider: 0 = no fade at all, 1 = hard old-style dimming.
+  // `FOCUS_DIM` sets how hard: 0 = no fade at all, 1 = hard old-style dimming.
   const distFromFocal = useMemo(() => {
     const src = hovered ?? (searchSet ? null : focal)
     if (!src) return null // search: matches are scattered — no meaningful distance
@@ -740,12 +744,12 @@ export function ForceGraph({
   const dimFactor = (id: string) => {
     if (!activeSet || activeSet.has(id)) return 1
     const rings = distFromFocal ? Math.max((distFromFocal.get(id) ?? 3) - 1, 1) : 2
-    return Math.max(0.05, Math.pow(1 - focusDim, rings))
+    return Math.max(0.05, Math.pow(1 - FOCUS_DIM, rings))
   }
 
   // Emphasis is a *boost*, not just an exemption from dimming: the focused cluster's
   // nodes lift to near-full opacity so a centered category's projects are readable
-  // regardless of where the projects/folder sliders sit.
+  // despite the muted resting base.
   const emphasized = (id: string) => (activeSet?.has(id) ?? false)
   const nodeOpacity = (n: GraphNode) => {
     const base = baseOpacity(n)
@@ -753,14 +757,9 @@ export function ForceGraph({
     return emphasized(n.id) ? Math.max(base, 0.95) : base * dimFactor(n.id)
   }
 
-  // Base opacity: root/hubs/about are always on (1); only projects are dimmable, by the
-  // projects slider × their folder slider. Folder opacity thus dims a category's
-  // projects, never its hub.
-  const baseOpacity = (n: GraphNode) => {
-    if (n.type !== 'project') return 1
-    const folder = n.category ? (folderOpacity[n.category] ?? 1) : 1
-    return projectOpacity * folder
-  }
+  // Base opacity: root/hubs/about are always on (1); projects rest at a calmer
+  // fixed mid-opacity so the structural skeleton leads.
+  const baseOpacity = (n: GraphNode) => (n.type !== 'project' ? 1 : PROJECT_OPACITY)
   const baseOf = (id: string) => {
     const n = byId.get(id)
     return n ? baseOpacity(n) : 1
@@ -795,7 +794,11 @@ export function ForceGraph({
     if (n.type !== 'project') return 1
     // The focused cluster reads like a table of contents: labels fully on.
     if (n.pinned || hovered === n.id || isMatch(n.id) || emphasized(n.id)) return 1
-    return baseOpacity(n) * clamp((k - 0.7) / 0.8, 0, 1)
+    // quiet labels: fully hidden at the resting zoom (k=1) — only the structural
+    // skeleton is named until you zoom in or emphasize a cluster.
+    return quietLabels
+      ? baseOpacity(n) * clamp((k - 1.15) / 0.6, 0, 1)
+      : baseOpacity(n) * clamp((k - 0.7) / 0.8, 0, 1)
   }
 
   return (
@@ -824,11 +827,22 @@ export function ForceGraph({
               const eBase = Math.min(baseOf(e.source), baseOf(e.target))
               // On-cluster edges lift with their nodes (the emphasis boost ignores the
               // muted base); off-cluster edges dim by the endpoints' ring distance.
+              // muted edges: the resting web is a faint constellation — links only
+              // assert themselves when a cluster is emphasized.
+              const restBase = muteEdges
+                ? e.kind === 'tag'
+                  ? 0.18
+                  : e.kind === 'related'
+                    ? 0.3
+                    : 0.4
+                : e.kind === 'tag'
+                  ? 0.5
+                  : 0.8
               const opacity = activeSet
                 ? on
                   ? 0.9
                   : 0.75 * Math.min(dimFactor(e.source), dimFactor(e.target)) * eBase
-                : (e.kind === 'tag' ? 0.5 : 0.8) * eBase
+                : restBase * eBase
 
               const bothVisible = introOf(e.source) > 0 && introOf(e.target) > 0
               const edgeLength = e.kind === 'tag' ? 380 : e.kind === 'related' ? 280 : 180
