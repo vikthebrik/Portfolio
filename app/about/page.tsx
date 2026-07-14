@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { projects } from '#site/content'
+import { PageNav } from '@/components/PageNav'
 import { COURSEWORK, LINKS } from '@/lib/links'
 
 export const metadata: Metadata = {
@@ -14,7 +15,8 @@ export default function About() {
   const projectCount = projects.length
 
   return (
-    <article className="mx-auto max-w-2xl px-6 py-16">
+    <article className="mx-auto max-w-2xl px-6 py-8">
+      <PageNav />
       <nav aria-label="Breadcrumb" className="text-xs text-faint">
         <Link href="/" className="hover:text-clay">
           portfolio

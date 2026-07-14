@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { forceSimulation, forceCollide, type Simulation, type ForceLink } from 'd3-force'
 import { select } from 'd3-selection'
 import { zoom as d3zoom, zoomIdentity, type ZoomBehavior } from 'd3-zoom'
 import { CATEGORIES } from '@/lib/categories'
 import { ROOT_ID, ABOUT_ID, type EdgeKind, type Graph, type GraphNode, type GraphEdge } from '@/lib/graph'
-import { applyLayout, nodeRadius, type LayoutKind, type SimNode } from '@/lib/layouts'
+import { INTRO_BUTTON_ID } from '@/lib/intro'
+import { applyLayout, nodeRadius, layoutAnchor, type LayoutKind, type SimNode } from '@/lib/layouts'
 import { useGraphBridge, type Transform } from './GraphBridge'
 
 type SimLink = Omit<GraphEdge, 'source' | 'target'> & {
@@ -40,12 +41,73 @@ const GLIDE_MS = 900
 const easeInOutCubic = (p: number) =>
   p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2
 
+// Growth pacing. The intro is the slowest, dreamiest version; in-session reveals
+// (a hub's projects budding on demand) use the same shapes at a more responsive
+// tempo. Node scale + opacity fades + edge draw-on all share these beats.
+const INTRO_SCALE_MS = 2800
+const INTRO_FADE_MS = 1100
+const INTRO_EDGE_MS = 3000
+const INTRO_STAGGER_MS = 280
+const REVEAL_SCALE_MS = 1600
+const REVEAL_FADE_MS = 900
+const REVEAL_EDGE_MS = 1800
+const REVEAL_STAGGER_MS = 110
+// The launch button *is* the root node: hold the root at the button's spot for a
+// beat after launch, then glide out slower than a normal re-root.
+const INTRO_ROOT_HOLD_MS = 400
+const INTRO_GLIDE_MS = 1400
+
+// Spoke geometry shared by every seeding pass (intro gather, replay, reveals):
+// hubs + about fan around the root in a fixed order.
+const SPOKES: readonly string[] = [...CATEGORIES, ABOUT_ID]
+const spokeAngle = (id: string) => {
+  const idx = SPOKES.indexOf(id)
+  return idx === -1 ? 0 : (idx / SPOKES.length) * 2 * Math.PI - Math.PI / 2
+}
+
+// The bloom origin, in graph coordinates: the launch button's root circle, measured
+// live (the overlay is viewport-centered while the pane is not — the hidden sidebar
+// still reserves its column), falling back to the viewport center.
+const measureSeed = (wrap: HTMLElement, w: number, h: number) => {
+  const btn = document.getElementById(INTRO_BUTTON_ID)?.getBoundingClientRect()
+  const rect = wrap.getBoundingClientRect()
+  const cx = btn ? btn.left + btn.width / 2 : window.innerWidth / 2
+  const cy = btn ? btn.top + btn.height / 2 : window.innerHeight / 2
+  return { x: clamp(cx - rect.left, 0, w), y: clamp(cy - rect.top, 0, h) }
+}
+
+// Gather the (invisible) web at the seed, each node nudged a hair along its spoke
+// direction so the release pushes outward instead of exploding randomly.
+const gatherAtSeed = (nodes: SimNode[], seed: { x: number; y: number }) => {
+  for (const n of nodes) {
+    if (n.fx != null && n.id !== ROOT_ID) continue // hand pins stay put
+    if (n.type === 'category' || n.type === 'about') {
+      const angle = spokeAngle(n.id)
+      n.x = seed.x + Math.cos(angle) * 8
+      n.y = seed.y + Math.sin(angle) * 8
+    } else if (n.type === 'project' && n.category) {
+      const angle = spokeAngle(n.category)
+      n.x = seed.x + Math.cos(angle) * 10
+      n.y = seed.y + Math.sin(angle) * 10
+    } else {
+      n.x = seed.x
+      n.y = seed.y
+    }
+  }
+}
+
 /**
  * Obsidian-style force graph. Layout comes from `lib/layouts` (swappable force
  * configs; the sim reheats without rebuilding, so drags survive). Node opacity is
  * layered: a fixed resting base by node type, then dimmed further by hover/soft-focus
  * emphasis (per ring of graph-distance).
- * State-driven render (cheap at ~12 nodes) so all that styling composes.
+ *
+ * The `revealed` prop (owned by GraphExplorer) is the bloom engine: projects render
+ * only while in it — empty during the intro's skeleton stage, then all of them, so
+ * they fan out of their hubs (the reveal-sync effect seeds newcomers at the hub,
+ * restores their forces, reheats). Every node is in the sim from the start —
+ * visibility is opacity + force gating, never membership.
+ * State-driven render (cheap at ~17 nodes) so all that styling composes.
  */
 export function ForceGraph({
   graph,
@@ -55,6 +117,7 @@ export function ForceGraph({
   center,
   query,
   intro,
+  revealed,
   onActivateNode,
 }: {
   graph: Graph
@@ -63,7 +126,8 @@ export function ForceGraph({
   muteEdges: boolean // resting edges read as a faint constellation until a cluster is emphasized
   center: string | null // the re-rooted node (null = root/overview): pinned + emphasized
   query: string // search — emphasize matching nodes, dim the rest
-  intro: number // launch stage (see lib/intro): -1 pending, 0 name, 1 hubs, 2 projects, 3 done
+  intro: number // launch stage (see lib/intro): -1 pending, 0 name, 1 hubs grow, 2 chrome, 3 done
+  revealed: ReadonlySet<string> // projects grown in (empty pre-launch, all once the bloom fires)
   onActivateNode: (node: GraphNode) => void
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -98,16 +162,30 @@ export function ForceGraph({
   const [hovered, setHovered] = useState<string | null>(null)
   const [kbFocus, setKbFocus] = useState<string | null>(null) // keyboard cursor → focus ring
 
+  // `shown` = the projects currently in the web. It follows `revealed` ∪ the live
+  // search matches via the reveal-sync effect below — the one-commit lag is
+  // deliberate, so the commit that makes a node visible already carries its entrance
+  // styles. `growing` marks nodes mid-entrance/exit (slow transitions + stagger
+  // apply only to them).
+  const [shown, setShown] = useState<ReadonlySet<string>>(() => new Set(revealed))
+  const shownRef = useRef(shown)
+  const [growing, setGrowing] = useState<ReadonlySet<string>>(new Set())
+
   // Publish a live snapshot to the bridge (for the minimap). Cheap: writes a ref.
   const publish = () => {
     if (!bridge) return
     const positions: Record<string, { x: number; y: number }> = {}
-    for (const n of simNodesRef.current) positions[n.id] = { x: n.x ?? 0, y: n.y ?? 0 }
+    const hidden: string[] = []
+    for (const n of simNodesRef.current) {
+      positions[n.id] = { x: n.x ?? 0, y: n.y ?? 0 }
+      if (n.type === 'project' && !shownRef.current.has(n.id)) hidden.push(n.id)
+    }
     bridge.snapshotRef.current = {
       positions,
       bounds: sizeRef.current,
       transform: transformRef.current,
       center: centerRef.current,
+      hidden, // unrevealed projects — the minimap skips them (they mirror the big graph)
       version: ++publishVersion.current, // monotonic — the minimap's change signal
     }
   }
@@ -152,14 +230,14 @@ export function ForceGraph({
 
   // Glide the center node's *pin* from where it sits to the layout anchor. Without this
   // the fx/fy pin teleports the node to pane center on the next tick — the "snap".
-  const glidePin = (node: SimNode, to: { x: number; y: number }) => {
+  const glidePin = (node: SimNode, to: { x: number; y: number }, ms = GLIDE_MS) => {
     const from = { x: node.x ?? to.x, y: node.y ?? to.y }
     if (Math.hypot(to.x - from.x, to.y - from.y) < 1) return
     const token = glideToken.current
     const start = performance.now()
     const step = (now: number) => {
       if (glideToken.current !== token) return // superseded
-      const p = Math.min((now - start) / GLIDE_MS, 1)
+      const p = Math.min((now - start) / ms, 1)
       const e = easeInOutCubic(p)
       node.fx = from.x + (to.x - from.x) * e
       node.fy = from.y + (to.y - from.y) * e
@@ -183,6 +261,25 @@ export function ForceGraph({
     return m
   }, [graph])
 
+  const projectIds = useMemo(
+    () => new Set(graph.nodes.filter((n) => n.type === 'project').map((n) => n.id)),
+    [graph],
+  )
+
+  // Search set — nodes whose title or tags match the query. Emphasized like a persistent
+  // multi-node hover (and matched projects are temporarily shown even if unrevealed).
+  const searchSet = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return null
+    const s = new Set<string>()
+    for (const n of graph.nodes) {
+      const inLabel = n.label.toLowerCase().includes(q)
+      const inTags = n.tags?.some((t) => t.toLowerCase().includes(q)) ?? false
+      if (inLabel || inTags) s.add(n.id)
+    }
+    return s
+  }, [graph, query])
+
   const reapplySavedPins = (nodes: SimNode[]) => {
     const saved = loadPositions()
     for (const n of nodes) {
@@ -191,6 +288,30 @@ export function ForceGraph({
         n.fx = p.x
         n.fy = p.y
       }
+    }
+  }
+
+  // Unrevealed projects must not shape the layout: zero collision radius and zero
+  // strength on any link that touches one. `applyLayout` reinstalls the default
+  // link/collide forces, so this must be re-applied after every applyLayout call
+  // (build, resize, layout switch, re-root) and whenever `shown` changes.
+  const applyVisibilityForces = () => {
+    const sim = simRef.current
+    if (!sim) return
+    const hiddenProject = (n: SimNode) =>
+      n.type === 'project' && !shownRef.current.has(n.id)
+    sim.force(
+      'collide',
+      forceCollide<SimNode>((n) => (hiddenProject(n) ? 0 : nodeRadius(n) + 52)),
+    )
+    const linkForce = sim.force('link') as ForceLink<SimNode, SimLink> | undefined
+    if (linkForce) {
+      const linkStrengthScale =
+        layoutRef.current === 'radial' ? 0.3 : layoutRef.current === 'tree' ? 0.4 : 1
+      linkForce.strength((e) => {
+        if (hiddenProject(e.source) || hiddenProject(e.target)) return 0
+        return (e.weight ?? 1) * linkStrengthScale
+      })
     }
   }
 
@@ -203,6 +324,7 @@ export function ForceGraph({
     sizeRef.current = { w, h }
 
     const saved = loadPositions()
+    const anchor = layoutAnchor(layoutRef.current, w, h)
     const nodes: SimNode[] = graph.nodes.map((n) => {
       const s: SimNode = { ...n }
       const p = saved[n.id]
@@ -211,6 +333,13 @@ export function ForceGraph({
         s.y = p.y
         s.fx = p.x // hand-placed nodes stay pinned
         s.fy = p.y
+      } else {
+        // Initialize close to the layout anchor with a small jitter to break symmetry
+        // and allow the physics engine to fan them out cleanly in all directions.
+        const angle = Math.random() * 2 * Math.PI
+        const radius = 10 + Math.random() * 20
+        s.x = anchor.x + Math.cos(angle) * radius
+        s.y = anchor.y + Math.sin(angle) * radius
       }
       return s
     })
@@ -221,6 +350,7 @@ export function ForceGraph({
     simRef.current = sim
     applyLayout(sim, layoutRef.current, { w, h, edges, centerId: centerRef.current })
     reapplySavedPins(nodes) // hand-drags win over the layout's center pin
+    applyVisibilityForces() // unrevealed projects stay forceless
 
     const requestPaint = () => {
       if (rafPending.current) return
@@ -242,34 +372,9 @@ export function ForceGraph({
       if (introRef.current < 3) {
         // Launch intro: gather the (invisible) web at the launch button and
         // freeze until stage 1 — the growth is the sim settling from this seed.
-        const rect = wrap.getBoundingClientRect()
-        const seed = {
-          x: clamp(window.innerWidth / 2 - rect.left, 0, w),
-          y: clamp(window.innerHeight / 2 - rect.top, 0, h),
-        }
+        const seed = measureSeed(wrap, w, h)
         introSeed.current = seed
-        const spokes = [...CATEGORIES, ABOUT_ID]
-        const getSpokeAngle = (id: string) => {
-          const idx = spokes.indexOf(id)
-          if (idx === -1) return 0
-          return (idx / spokes.length) * 2 * Math.PI - Math.PI / 2
-        }
-
-        for (const n of nodes) {
-          if (n.fx != null && n.id !== ROOT_ID) continue // hand pins stay put
-          if (n.type === 'category' || n.type === 'about') {
-            const angle = getSpokeAngle(n.id)
-            n.x = seed.x + Math.cos(angle) * 8
-            n.y = seed.y + Math.sin(angle) * 8
-          } else if (n.type === 'project' && n.category) {
-            const angle = getSpokeAngle(n.category)
-            n.x = seed.x + Math.cos(angle) * 10
-            n.y = seed.y + Math.sin(angle) * 10
-          } else {
-            n.x = seed.x
-            n.y = seed.y
-          }
-        }
+        gatherAtSeed(nodes, seed)
         introHeld.current = true
         sim.stop()
         setTick((t) => t + 1)
@@ -289,6 +394,7 @@ export function ForceGraph({
         centerId: centerRef.current,
       })
       reapplySavedPins(nodes)
+      applyVisibilityForces()
       if (prefersReducedMotion()) {
         sim.tick(120)
         setTick((t) => t + 1)
@@ -309,16 +415,26 @@ export function ForceGraph({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [graph])
 
-  // Release the held sim once the intro reaches stage 1 (or is skipped) — full
-  // alpha so the gathered nodes grow out to the layout in one organic settle.
-  // The root's pin travels from the launch button to its layout anchor (same
-  // glide the re-roots use), so the whole web visibly grows *from the button*
-  // and drifts into place as the chrome arrives.
-  useEffect(() => {
+  // Release the held sim once the intro reaches stage 1 — the button *becomes* the
+  // root: the root holds at the button's spot for a beat (the hubs already budding
+  // around it) before its pin glides — slower than a re-root — to the layout anchor,
+  // dragging the young web into place as the chrome arrives. Layout effect: the
+  // re-gather must land before the first stage-1 paint (the root appears instantly,
+  // and it must appear *at the button*, not wherever the pre-launch settle left it).
+  useLayoutEffect(() => {
     if (intro < 1 || !introHeld.current) return
     introHeld.current = false
     const sim = simRef.current
     if (!sim) return
+    // Re-measure at release: the button is where the user just clicked *now*
+    // (typing-stage resizes would have stranded a mount-time measurement).
+    const wrap = wrapRef.current
+    if (wrap) {
+      const { w, h } = sizeRef.current
+      const seed = measureSeed(wrap, w, h)
+      introSeed.current = seed
+      gatherAtSeed(simNodesRef.current, seed)
+    }
     const root = simNodesRef.current.find((n) => n.id === ROOT_ID)
     const seed = introSeed.current
     if (root && seed) {
@@ -328,137 +444,118 @@ export function ForceGraph({
       }
       root.x = seed.x
       root.y = seed.y
-      glidePin(root, anchor)
+      root.fx = seed.x
+      root.fy = seed.y
+      // No cleanup: a fast-forward mid-hold must still deliver the root to its
+      // anchor (glidePin's token check handles genuine supersession).
+      window.setTimeout(
+        () => glidePin(root, anchor, INTRO_GLIDE_MS),
+        INTRO_ROOT_HOLD_MS,
+      )
     }
-    sim.alpha(0.65).restart()
+    sim.alpha(0.5).restart()
   }, [intro])
 
-  // At stage 2, projects bloom. To make it feel like synthetic biology,
-  // we seed each project's position at its category hub's current position
-  // so they visually bud and push outward from their parent hubs.
+  // Reveal sync: `shown` follows `revealed` ∪ current search matches. Newly shown
+  // projects bud out of their hub — seeded at its position in a small fan, forces
+  // restored, gentle reheat. The first sync after an intro-less mount (repeat visit,
+  // deep link, fast-forward) is NOT animated — those paths promise the settled web.
+  const firstSyncDone = useRef(false)
   useEffect(() => {
-    if (intro !== 2) return
-    const sim = simRef.current
-    if (!sim) return
+    const target = new Set(revealed)
+    if (searchSet) for (const id of searchSet) if (projectIds.has(id)) target.add(id)
 
-    // Find the hubs/about nodes' current positions
-    const hubPositions = new Map<string, { x: number; y: number }>()
-    for (const n of simNodesRef.current) {
-      if (n.type === 'category' || n.type === 'about') {
-        hubPositions.set(n.id, { x: n.x ?? 0, y: n.y ?? 0 })
+    const prev = shownRef.current
+    const additions: string[] = []
+    const removals: string[] = []
+    for (const id of target) if (!prev.has(id)) additions.push(id)
+    for (const id of prev) if (!target.has(id)) removals.push(id)
+    if (!additions.length && !removals.length) return
+
+    const animate =
+      !prefersReducedMotion() &&
+      !(!firstSyncDone.current && introRef.current >= 3)
+    firstSyncDone.current = true
+
+    shownRef.current = target
+    setShown(target)
+
+    const sim = simRef.current
+    if (sim && !introHeld.current) {
+      if (additions.length && animate) {
+        // Seed each newcomer at its hub, fanned outward along the hub's spoke
+        // direction. Hand-pinned nodes keep their saved spot.
+        const byCat = new Map<string, SimNode[]>()
+        for (const n of simNodesRef.current) {
+          if (n.category && additions.includes(n.id) && n.fx == null) {
+            const list = byCat.get(n.category) ?? []
+            list.push(n)
+            byCat.set(n.category, list)
+          }
+        }
+        for (const [cat, list] of byCat) {
+          const hub = simNodesRef.current.find((n) => n.id === cat)
+          if (!hub) continue
+          const hubAngle = spokeAngle(cat)
+          const fanSpread = Math.PI / 1.5
+          list.forEach((p, idx) => {
+            const angle =
+              list.length > 1
+                ? hubAngle - fanSpread / 2 + (idx / (list.length - 1)) * fanSpread
+                : hubAngle
+            p.x = (hub.x ?? 0) + Math.cos(angle) * 12
+            p.y = (hub.y ?? 0) + Math.sin(angle) * 12
+          })
+        }
+      }
+      applyVisibilityForces()
+      if (prefersReducedMotion()) {
+        sim.tick(200)
+        setTick((t) => t + 1)
+        publish()
+      } else {
+        sim.alpha(additions.length ? 0.45 : 0.2).restart()
       }
     }
 
-    const spokes = [...CATEGORIES, ABOUT_ID]
-    const getSpokeAngle = (id: string) => {
-      const idx = spokes.indexOf(id)
-      if (idx === -1) return 0
-      return (idx / spokes.length) * 2 * Math.PI - Math.PI / 2
+    // Entrance/exit styling window (sized to the pacing in play — the intro's
+    // stage-2 bloom runs on the slower intro beats); expired ids drop back to
+    // instant styling.
+    if (animate) {
+      const batch = [...additions, ...removals]
+      const windowMs =
+        introRef.current < 3
+          ? INTRO_SCALE_MS + 5 * INTRO_STAGGER_MS + 200
+          : REVEAL_SCALE_MS + 5 * REVEAL_STAGGER_MS + 200
+      setGrowing((g) => new Set([...g, ...batch]))
+      window.setTimeout(() => {
+        setGrowing((g) => {
+          const next = new Set(g)
+          for (const id of batch) next.delete(id)
+          return next
+        })
+      }, windowMs)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealed, searchSet, projectIds])
 
-    // Group projects by category
-    const projectsByCat = new Map<string, SimNode[]>()
-    for (const n of simNodesRef.current) {
-      if (n.type === 'project' && n.category) {
-        if (!projectsByCat.has(n.category)) projectsByCat.set(n.category, [])
-        projectsByCat.get(n.category)!.push(n)
-      }
-    }
-
-    // Seed project positions radially around their parent hub in a fan shape pointing away from the center
-    for (const [cat, list] of projectsByCat.entries()) {
-      const hubPos = hubPositions.get(cat)
-      if (!hubPos) continue
-      const hubAngle = getSpokeAngle(cat)
-      
-      list.forEach((p, idx) => {
-        const fanSpread = Math.PI / 1.5
-        const angle = list.length > 1
-          ? hubAngle - fanSpread / 2 + (idx / (list.length - 1)) * fanSpread
-          : hubAngle
-        p.x = hubPos.x + Math.cos(angle) * 12
-        p.y = hubPos.y + Math.sin(angle) * 12
-        p.fx = null
-        p.fy = null
-      })
-    }
-
-    sim.alpha(0.55).restart()
-  }, [intro])
-
-  // Configure forces dynamically based on the intro stage to prevent jitter
-  // and make the growth structured (like roots growing from the center).
+  // Friction by intro stage: extremely high (0.94) to absorb the release shock,
+  // ramping to a slow organic drift (0.80) so the growth reads as budding, then
+  // the normal 0.4 once the intro is done. (Collide/link gating for unrevealed
+  // projects lives in applyVisibilityForces — during the intro nothing is revealed,
+  // so the hubs branch out of root on the spoke edges alone, exactly as before.)
   useEffect(() => {
     const sim = simRef.current
     if (!sim) return
-
-    // 1. Dynamic velocityDecay (friction) for slow organic movement.
-    // Start with extremely high friction (0.94) to absorb the initial force shock,
-    // then ramp down to a steady organic drift (0.80) after 350ms.
-    if (intro < 3) {
+    applyVisibilityForces()
+    if (intro >= 1 && intro < 3) {
       sim.velocityDecay(0.94)
       const t = window.setTimeout(() => {
-        if (introRef.current < 3) {
-          sim.velocityDecay(0.80)
-        }
-      }, 350)
-
-      // 2. Dynamic collision force: invisible projects have 0 collision radius
-      // so they don't cause explosive initial jitter.
-      const collisionPadding = 52
-      sim.force(
-        'collide',
-        forceCollide<SimNode>((n) => {
-          if (intro < 2 && n.type === 'project') return 0
-          return nodeRadius(n) + collisionPadding
-        })
-      )
-
-      // 3. Dynamic link force: during stage 1, only spoke edges (root -> hubs)
-      // are active, so hubs can branch out of root without being pulled back by projects.
-      const linkForce = sim.force('link') as ForceLink<SimNode, SimLink> | undefined
-      if (linkForce) {
-        const linkStrengthScale =
-          layoutRef.current === 'radial'
-            ? 0.3
-            : layoutRef.current === 'tree'
-              ? 0.4
-              : 1
-        linkForce.strength((e) => {
-          const kind = e.kind
-          const weight = e.weight ?? 1
-          if (intro < 2 && kind !== 'spoke') return 0
-          return weight * linkStrengthScale
-        })
-      }
-
-      // Re-heat simulation to apply the new forces gently
-      if (intro === 1) {
-        sim.alpha(0.5).restart()
-      } else if (intro === 2) {
-        sim.alpha(0.45).restart()
-      }
-
+        if (introRef.current < 3) sim.velocityDecay(0.8)
+      }, 700)
       return () => window.clearTimeout(t)
-    } else {
-      sim.velocityDecay(0.4) // default
-      // Restore standard forces when intro is complete
-      const collisionPadding = 52
-      sim.force(
-        'collide',
-        forceCollide<SimNode>((n) => nodeRadius(n) + collisionPadding)
-      )
-      const linkForce = sim.force('link') as ForceLink<SimNode, SimLink> | undefined
-      if (linkForce) {
-        const linkStrengthScale =
-          layoutRef.current === 'radial'
-            ? 0.3
-            : layoutRef.current === 'tree'
-              ? 0.4
-              : 1
-        linkForce.strength((e) => (e.weight ?? 1) * linkStrengthScale)
-      }
     }
+    if (intro >= 3) sim.velocityDecay(0.4)
   }, [intro])
 
   // Re-run the layout when the user switches it — reheat, keep nodes + pins.
@@ -469,6 +566,7 @@ export function ForceGraph({
     const edges = graph.edges.map((e) => ({ ...e }))
     applyLayout(sim, layout, { w, h, edges, centerId: centerRef.current })
     reapplySavedPins(sim.nodes())
+    applyVisibilityForces()
     if (prefersReducedMotion()) {
       sim.tick(300)
       setTick((t) => t + 1)
@@ -489,6 +587,7 @@ export function ForceGraph({
     const edges = graph.edges.map((e) => ({ ...e }))
     applyLayout(sim, layoutRef.current, { w, h, edges, centerId: center })
     reapplySavedPins(sim.nodes())
+    applyVisibilityForces()
     glideToken.current++ // cancel any in-flight glide before starting this one
     const cnode = simNodesRef.current.find((n) => n.id === (center ?? ROOT_ID))
     // Where the pin actually ended up: the layout anchor, or a hand-drag pin that won.
@@ -518,34 +617,9 @@ export function ForceGraph({
     if (intro !== 0 || introHeld.current || !sim || !wrap) return
     if (prefersReducedMotion()) return
     const { w, h } = sizeRef.current
-    const rect = wrap.getBoundingClientRect()
-    const seed = {
-      x: clamp(window.innerWidth / 2 - rect.left, 0, w),
-      y: clamp(window.innerHeight / 2 - rect.top, 0, h),
-    }
+    const seed = measureSeed(wrap, w, h)
     introSeed.current = seed
-    const spokes = [...CATEGORIES, ABOUT_ID]
-    const getSpokeAngle = (id: string) => {
-      const idx = spokes.indexOf(id)
-      if (idx === -1) return 0
-      return (idx / spokes.length) * 2 * Math.PI - Math.PI / 2
-    }
-
-    for (const n of simNodesRef.current) {
-      if (n.fx != null && n.id !== ROOT_ID) continue
-      if (n.type === 'category' || n.type === 'about') {
-        const angle = getSpokeAngle(n.id)
-        n.x = seed.x + Math.cos(angle) * 8
-        n.y = seed.y + Math.sin(angle) * 8
-      } else if (n.type === 'project' && n.category) {
-        const angle = getSpokeAngle(n.category)
-        n.x = seed.x + Math.cos(angle) * 10
-        n.y = seed.y + Math.sin(angle) * 10
-      } else {
-        n.x = seed.x
-        n.y = seed.y
-      }
-    }
+    gatherAtSeed(simNodesRef.current, seed)
     introHeld.current = true
     sim.stop()
     setTick((t) => t + 1)
@@ -674,6 +748,7 @@ export function ForceGraph({
     let best: string | null = null
     let bestScore = 0.05 // must be at least roughly in the pressed direction
     for (const nb of adjacency.get(node.id) ?? []) {
+      if (projectIds.has(nb) && !shown.has(nb)) continue // unrevealed: not walkable
       const to = pos(nb)
       if (!to) continue
       const dx = (to.x ?? 0) - (from.x ?? 0)
@@ -697,20 +772,6 @@ export function ForceGraph({
     if (!center || center === ROOT_ID) return null
     return new Set<string>([center, ...(adjacency.get(center) ?? [])])
   }, [center, adjacency])
-
-  // Search set — nodes whose title or tags match the query. Emphasized like a persistent
-  // multi-node hover.
-  const searchSet = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return null
-    const s = new Set<string>()
-    for (const n of graph.nodes) {
-      const inLabel = n.label.toLowerCase().includes(q)
-      const inTags = n.tags?.some((t) => t.toLowerCase().includes(q)) ?? false
-      if (inLabel || inTags) s.add(n.id)
-    }
-    return s
-  }, [graph, query])
 
   // Precedence: hover (transient) > search > re-rooted center.
   const activeSet = hovered
@@ -765,26 +826,29 @@ export function ForceGraph({
     return n ? baseOpacity(n) : 1
   }
 
-  // Launch intro: nodes join the web by layer — root+hubs at stage 1, projects
-  // (and with them the cross-link edges) at stage 2. Multiplies the normal
-  // opacity stack; a 700ms transition class (intro only) makes each wave a fade.
-  const introFactor = (n: GraphNode) => {
-    if (intro >= 2) return 1
-    if (intro === 1) return n.layer <= 1 ? 1 : 0
-    return 0
+  // Visibility multiplier on the whole opacity stack. Structural nodes ride the
+  // intro (hidden on the launch screen, on from stage 1); projects render only
+  // while in `shown` — empty during the skeleton stage, everything once the
+  // stage-2 bloom fires.
+  const visibleFactor = (n: GraphNode) => {
+    if (n.type !== 'project') return intro >= 1 ? 1 : 0
+    if (intro >= 0 && intro < 1) return 0 // launch screen: blank paper
+    return shown.has(n.id) ? 1 : 0
   }
-  const introOf = (id: string) => {
+  const visibleOf = (id: string) => {
     const n = byId.get(id)
-    return n ? introFactor(n) : 1
+    return n ? visibleFactor(n) : 1
   }
-  const introClass = intro < 3 ? ' transition-opacity duration-700' : ''
+
+  const reduceMotion = prefersReducedMotion()
   // Per-node emergence delay (deterministic hash of the id) — with the budding
   // scale below, each node divides into view on its own beat instead of the
-  // whole layer popping at once. Synthetic biology, not a slideshow.
-  const introDelay = (id: string) => {
+  // whole wave popping at once. Synthetic biology, not a slideshow. The intro
+  // staggers wider than in-session reveals.
+  const entranceDelay = (id: string) => {
     let h = 0
     for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 997
-    return (h % 6) * 160
+    return (h % 6) * (intro < 3 ? INTRO_STAGGER_MS : REVEAL_STAGGER_MS)
   }
 
   const labelOpacity = (n: GraphNode) => {
@@ -798,7 +862,7 @@ export function ForceGraph({
     // skeleton is named until you zoom in or emphasize a cluster.
     return quietLabels
       ? baseOpacity(n) * clamp((k - 1.15) / 0.6, 0, 1)
-      : baseOpacity(n) * clamp((k - 0.7) / 0.8, 0, 1)
+      : baseOpacity(n) * clamp((k - 0.5) / 0.6, 0.35, 1)
   }
 
   return (
@@ -844,29 +908,34 @@ export function ForceGraph({
                   : 0.75 * Math.min(dimFactor(e.source), dimFactor(e.target)) * eBase
                 : restBase * eBase
 
-              const bothVisible = introOf(e.source) > 0 && introOf(e.target) > 0
+              const bothVisible = visibleOf(e.source) > 0 && visibleOf(e.target) > 0
+              // Edges grow (stroke-dash draw-on) whenever an endpoint is entering:
+              // the whole web during the intro, the budding cluster on a reveal.
+              const entering =
+                !reduceMotion &&
+                (intro < 3 || growing.has(e.source) || growing.has(e.target))
               const edgeLength = e.kind === 'tag' ? 380 : e.kind === 'related' ? 280 : 180
-              const strokeDashoffset = intro < 3 ? (bothVisible ? 0 : edgeLength) : undefined
+              const drawMs = intro < 3 ? INTRO_EDGE_MS : REVEAL_EDGE_MS
+              const fadeMs = intro < 3 ? INTRO_FADE_MS : REVEAL_FADE_MS
 
               return (
                 <path
                   key={`${e.source}::${e.target}:${e.kind}`}
                   d={curve(s.x ?? 0, s.y ?? 0, t?.x ?? 0, t?.y ?? 0)}
                   fill="none"
-                  className={(touchesFocal && on ? 'stroke-clay' : 'stroke-line') + introClass}
+                  className={touchesFocal && on ? 'stroke-clay' : 'stroke-line'}
                   style={{
                     strokeWidth: STROKE_WIDTH[e.kind],
-                    opacity: opacity * Math.min(introOf(e.source), introOf(e.target)),
-                    strokeDasharray: intro < 3 ? edgeLength : undefined,
-                    strokeDashoffset,
-                    transition: intro < 3
-                      ? 'stroke-dashoffset 2200ms cubic-bezier(0.25, 1, 0.25, 1), opacity 1000ms ease-in-out'
+                    opacity: opacity * Math.min(visibleOf(e.source), visibleOf(e.target)),
+                    strokeDasharray: entering ? edgeLength : undefined,
+                    strokeDashoffset: entering ? (bothVisible ? 0 : edgeLength) : undefined,
+                    transition: entering
+                      ? `stroke-dashoffset ${drawMs}ms cubic-bezier(0.25, 1, 0.25, 1), opacity ${fadeMs}ms ease-in-out`
                       : undefined,
                     // Edges surface after their endpoints have budded.
-                    transitionDelay:
-                      intro < 3
-                        ? `${150 + Math.max(introDelay(e.source), introDelay(e.target))}ms`
-                        : undefined,
+                    transitionDelay: entering
+                      ? `${150 + Math.max(entranceDelay(e.source), entranceDelay(e.target))}ms`
+                      : undefined,
                   }}
                 />
               )
@@ -878,6 +947,12 @@ export function ForceGraph({
               const p = pos(n.id)
               const isFocal = n.id === focal
               const r = nodeRadius(n)
+              const hiddenNode = n.type === 'project' && !shown.has(n.id)
+              // The launch button *is* the root — it appears instantly at the
+              // button's exact spot at stage 1, no fade, no budding.
+              const isRootIntro = intro < 3 && n.id === ROOT_ID
+              const entering =
+                !reduceMotion && !isRootIntro && (intro < 3 || growing.has(n.id))
               const fill = isFocal
                 ? 'fill-clay'
                 : n.type === 'project'
@@ -894,11 +969,16 @@ export function ForceGraph({
                   key={n.id}
                   data-node
                   data-node-id={n.id}
+                  aria-hidden={hiddenNode || undefined}
                   transform={`translate(${p?.x ?? 0},${p?.y ?? 0})`}
-                  className={'cursor-pointer outline-none' + introClass}
+                  className="cursor-pointer outline-none"
                   style={{
-                    opacity: nodeOpacity(n) * introFactor(n),
-                    transitionDelay: intro < 3 ? `${introDelay(n.id)}ms` : undefined,
+                    opacity: nodeOpacity(n) * visibleFactor(n),
+                    transition: entering
+                      ? `opacity ${intro < 3 ? INTRO_FADE_MS : REVEAL_FADE_MS}ms ease`
+                      : undefined,
+                    transitionDelay: entering ? `${entranceDelay(n.id)}ms` : undefined,
+                    pointerEvents: hiddenNode ? 'none' : undefined,
                   }}
                   onPointerDown={onNodePointerDown(n as SimNode)}
                   onPointerEnter={() => setHovered(n.id)}
@@ -923,16 +1003,18 @@ export function ForceGraph({
                     r={r}
                     className={fill}
                     // Budding: each cell swells into place with a slight
-                    // overshoot, on the same per-node beat as its fade.
+                    // overshoot, on the same per-node beat as its fade. Hidden
+                    // projects rest at scale ~0 so a later reveal grows from it.
                     style={
-                      intro < 3
+                      !reduceMotion && !isRootIntro && (entering || hiddenNode)
                         ? {
-                            transform: introFactor(n) ? 'scale(1)' : 'scale(0.01)',
+                            transform: visibleFactor(n) ? 'scale(1)' : 'scale(0.01)',
                             transformBox: 'fill-box',
                             transformOrigin: 'center',
-                            transition:
-                              'transform 1800ms cubic-bezier(0.16, 1, 0.3, 1)',
-                            transitionDelay: `${introDelay(n.id)}ms`,
+                            transition: `transform ${
+                              intro < 3 ? INTRO_SCALE_MS : REVEAL_SCALE_MS
+                            }ms cubic-bezier(0.16, 1, 0.3, 1)`,
+                            transitionDelay: `${entranceDelay(n.id)}ms`,
                           }
                         : undefined
                     }
@@ -943,7 +1025,7 @@ export function ForceGraph({
                     className={[
                       'select-none font-mono',
                       sizeClass,
-                      isFocal ? 'fill-clay' : n.type === 'project' ? 'fill-muted' : 'fill-ink',
+                      isFocal ? 'fill-clay' : 'fill-ink',
                     ].join(' ')}
                     style={{ opacity: labelOpacity(n) }}
                   >

@@ -10,11 +10,13 @@ A CS/DSCI portfolio that presents work as an **explorable network graph** in the
 Obsidian style. The landing view is a single living web centered on a **ROOT node**
 (the landing itself) with **five spokes**: the four category hubs plus a
 `how it works` node. Projects hang off their category; `related`/`tag` edges
-cross-link everything into a web. Hovering a node highlights its connections and
-dims the rest; clicking any node **re-roots** the web on it (reheats the layout to
-center on it, glides the camera, emphasizes its cluster) while the whole web stays on
-screen — no filtering. A names-only file tree in the sidebar is the accessible,
-keyboard-navigable path through everything.
+cross-link everything into a web. The full web is the resting state; it *assembles*
+on launch — skeleton first, then every project blooms out of its hub (2026-07: the
+staged grow-out replaced an all-at-once reveal that read as overload). Hovering a
+node highlights its connections and dims the rest; clicking any node **re-roots**
+the web on it (reheats the layout to center on it, glides the camera, emphasizes its
+cluster) while the whole web stays on screen — no filtering. A names-only file tree
+in the sidebar is the accessible, keyboard-navigable path through everything.
 
 Four top-level categories (hub nodes): `tech`, `design`, `drone`, `research`.
 
@@ -70,8 +72,9 @@ One connected web, built in `lib/graph.ts`:
   categories together into a web rather than four separate stars.
 
 `root`, `how it works`, and the hubs are structural nodes defined in code; only
-projects are content-derived. There is no `focused`/filtered subgraph — the whole web
-is always rendered (see Navigation).
+projects are content-derived. Every node lives in the simulation from the start —
+the launch bloom is opacity + force gating on not-yet-grown projects, never
+membership changes or a filtered subgraph (see Navigation).
 
 ## Media strategy (important)
 
@@ -121,8 +124,8 @@ style**, not ASCII:
   degree bump for projects) with the **title only** beneath — no `[ brackets ]`, no
   summary on the node.
 - **Root, hubs, and how-it-works are always on**: fixed full opacity and always
-  labelled — the structural skeleton never fades. Projects rest at a fixed calmer
-  base (`PROJECT_OPACITY` 0.55 in `ForceGraph.tsx`); there are no opacity sliders
+  labelled — the structural skeleton never fades. Projects rest at
+  `PROJECT_OPACITY` (`ForceGraph.tsx`, currently 1). There are no opacity sliders
   (removed 2026-07 — the panel is toggles only).
 - Project labels **fade in/out with zoom** (a `pinned`, hovered, or search-matched
   project always shows its label). With the **quiet labels** toggle (default on),
@@ -151,20 +154,35 @@ instant state transitions).
 
 ## Navigation
 
-One always-visible web; navigation is emphasis + routing, not subgraph filtering:
+One always-visible web; navigation is emphasis + routing, not subgraph filtering.
+The web *assembles* on launch — skeleton first, then projects — via the **bloom
+engine**: `GraphExplorer` owns `revealed` (project ids; empty during the intro's
+skeleton stage, flipped to all projects at stage 2 / on any intro skip), ForceGraph's
+reveal-sync grows newcomers in place (seeded at their hub in a fan, budding scale +
+edge draw-on, gentle reheat). Every node is in the simulation from the start — the
+bloom is opacity + force gating (`applyVisibilityForces` in `ForceGraph.tsx`: zero
+collide radius + zero link strength for not-yet-grown projects; must be re-applied
+after every `applyLayout`, which reinstalls default forces), never membership
+changes. The first reveal-sync after an intro-less mount (repeat visit, deep link,
+reduced motion, fast-forward) is deliberately **not** animated — those paths promise
+the settled web. Not-yet-grown projects are `aria-hidden`, `pointer-events: none`,
+skipped by the arrow-key walk, and skipped by the minimap (the bridge snapshot
+carries `hidden`) — all of which only matters mid-intro.
 
 - **launch intro** — first visit each session (desktop only), the landing is a
   *launch screen*: the name types over blank paper, then the tagline, a two-line
   introduction (`IDENTITY.intro`), and a root-node-shaped **click to launch** button
-  reveal (`IntroOverlay` — `fixed`, viewport-centered; centering in the pane reads
-  off-center because the hidden sidebar still reserves its column). It waits for the
-  click (button autofocused — Enter works; clicking anywhere launches): the sim —
-  built frozen with every node gathered at the button's spot — releases and the web
-  *grows out of the button*, the root's pin gliding to its pane anchor while nodes
-  fade in by layer waves and chrome (sidebar/nav/panel/minimap/terminal tab) arrives
-  last, ending on a one-line hint chip. Hidden chrome is `inert` during the intro.
-  Owned by `GraphExplorer` (launch + timed stages) + `lib/intro.ts` (skip predicate +
-  a `useSyncExternalStore` store the global chrome subscribes to). Never a toll:
+  reveal (`IntroOverlay` — `fixed`, viewport-centered). On click the button *becomes
+  the root node*: its circle (`INTRO_BUTTON_ID`, sized to the root's rendered radius)
+  hides instantly while the graph root appears at its measured spot (`measureSeed`),
+  holds a beat (`INTRO_ROOT_HOLD_MS` 400), then its pin glides — slower than a
+  re-root (`INTRO_GLIDE_MS` 1400) — to the pane anchor as the *skeleton* grows slowly
+  out of it (`INTRO_*` pacing constants). At stage 2 (3000ms — `GraphExplorer.launch`)
+  every project blooms out of its hub while the chrome (sidebar/nav/panel/minimap/
+  terminal tab) fades in; done at 7400ms (past the last stagger so nothing snaps),
+  ending on a hint chip. Hidden chrome is `inert` during the intro. Owned by
+  `GraphExplorer` (launch + timed stages) + `lib/intro.ts` (skip predicate + a
+  `useSyncExternalStore` store the global chrome subscribes to). Never a toll:
   reduced motion, mobile, `?focus=` deep links, and repeat visits (sessionStorage)
   skip straight to the settled web; a click mid-bloom fast-forwards.
 - **overview** — the full web, rooted on `root`. No node is hidden.
@@ -175,14 +193,18 @@ One always-visible web; navigation is emphasis + routing, not subgraph filtering
   shared ~900ms eased tween (`GLIDE_MS`; reduced-motion jumps instantly). Its cluster
   (the node + direct neighbors) is emphasized; everything else fades **by graph-distance
   from the center** (see "focus fade" below), so same-ring peers — the other hubs — stay
-  readable instead of vanishing. The full web stays on screen — nothing is filtered. Synced to the URL as `?focus=<nodeId>` (a shareable deep
-  link) via the History API, so the graph never remounts and **browser Back/Forward — plus
-  the in-graph `‹ ›` buttons — traverse the re-root history**. Clicking `root`, the centered
-  hub again, or "overview" in the breadcrumb clears back to the root. A *project* takes one
-  click to center; clicking the already-centered project (or the breadcrumb's `open ↵`)
-  opens its case study.
+  readable instead of vanishing. The full web stays on screen — nothing is filtered.
+  Synced to the URL as `?focus=<nodeId>` (a shareable deep link) via the History API,
+  so the graph never remounts and **browser Back/Forward — plus the in-graph `‹ ›`
+  buttons — traverse the re-root history**. Clicking `root`, the centered hub again, or
+  "overview" in the breadcrumb clears back to the root. A *project* takes one click to
+  center; clicking the already-centered project (or the breadcrumb's `open ↵`) opens
+  its case study.
 - **detail** — a project's case study at `/work/[slug]` (RSC, unchanged). `how it
-  works` routes to `/about`.
+  works` routes to `/about`. Both carry **`components/PageNav.tsx`** (2026-07): a
+  sticky `‹ back` / `⌂ home` row above the breadcrumb — `back` uses real history when
+  the visitor came from within the site, else falls back to `/?focus=<category>`
+  (work) or `/` (about); `home` always links to the overview.
 - **search** — the sidebar search box matches project title/tags: the graph emphasizes
   matches (dims the rest, same mechanism as hover/re-root) and the sidebar tree filters to
   matches. Transient, not persisted.
@@ -193,16 +215,17 @@ One always-visible web; navigation is emphasis + routing, not subgraph filtering
   plus a clay focus ring. The sidebar tree remains the linear accessible path.
 - **minimap** — a persistent panel bottom-right (`components/Minimap.tsx`, mounted in
   `app/layout.tsx`). On the main graph it mirrors the live layout, **rings the current
-  center** (from the bridge snapshot), draws a draggable **viewport box** that pans the big
-  graph, and clicking a node re-roots the big graph in place (via the bridge's center
-  channel — no page load); on **detail pages** (where the big graph is hidden) it runs its
-  own headless layout, highlights the current node, and lets you click any node to traverse
-  without going back. Main graph ↔ minimap talk through `components/GraphBridge.tsx` (a
-  ref-based bridge: snapshot + pan + center channels — no re-render storms). Hidden on mobile.
+  center** (from the bridge snapshot), draws a draggable **viewport box** that pans the
+  big graph, and clicking a node re-roots the big graph in place (via the bridge's
+  center channel — no page load); on **detail pages** (where the big graph is hidden)
+  it runs its own headless layout, highlights the current node, and lets you click any
+  node to traverse without going back. Main graph ↔ minimap talk through
+  `components/GraphBridge.tsx` (a ref-based bridge: snapshot + pan + center channels —
+  no re-render storms). Hidden on mobile.
 
 The simulation runs once and is never rebuilt on navigation; a re-root **reheats** it
 (same node objects, new center pin + ring distances) rather than re-running from scratch —
-it only ever changes forces + styling, never filters the web. Hand-drag pins still win over
+it only ever changes forces + styling, never node membership. Hand-drag pins still win over
 the center pin. (`focusCategory()` from the old filtered-subgraph model is retired.)
 
 ## Terminal (the IDE way in)
@@ -240,7 +263,7 @@ Auto-derivation is the default; these let a human override it:
 - **Layout** — the view panel picks a layout: `auto` (content-based default) or a manual
   override (`web` / `radial` / `tree` / `cluster`). Persisted in `view:v1` (below).
 - **Opacity & focus fade are fixed, not sliders** (removed 2026-07): root/hubs/
-  how-it-works are always on; projects rest at `PROJECT_OPACITY` (0.55) and focus
+  how-it-works are always on; projects rest at `PROJECT_OPACITY` (1) and focus
   fade is `FOCUS_DIM` (0.85), both constants in `ForceGraph.tsx`. The fade multiplier
   is `(1 - FOCUS_DIM)^rings` by BFS distance from the focal node (floor 0.05) — at
   0.85 the first off-cluster ring drops to 0.15, a hard spotlight. Search uses a flat
@@ -263,34 +286,31 @@ Auto-derivation is the default; these let a human override it:
 `lib/layouts.ts` (client-only; imports `d3-force`) owns the graph arrangements. Each is a
 *reconfiguration of the simulation's forces* (never static positions) so switching just
 reheats — node objects and drag pins survive. Exactly one node is pinned as the anchor:
-the **center** (`applyLayout`'s `centerId`, default `root`). The concentric rings/rows use
-**graph-distance from the center** (a BFS in `applyLayout`); when the center *is* root this
-equals `layer` (BFS depth from root, computed in `lib/graph.ts`: root 0, hubs+about 1,
-projects 2) — one code path. Re-rooting on another node just pins it and re-rings around it.
-`layer` still drives per-layer node size + opacity.
+the **center** (`applyLayout`'s `centerId`, default `root`).
 
-- **web** — center pinned + mild radial-by-distance → centralized organic web (fixes the
-  old "chain" look).
-- **radial** — strong radial-by-distance → clean concentric rings.
-- **cluster** — each folder anchored around the center → folders separate spatially.
-- **tree** — center top, y by distance-from-center → rough top-down hierarchy rooted at it.
+The concentric rings/rows use **graph-distance from the center** (a BFS in `applyLayout`).
+To keep category hubs on the inner level and projects on the outer web organically, the simulation utilizes a **physics-based weight-scaling algorithm**:
+- **Node Weights**: Nodes are assigned a weight based on their number of children:
+  - `weight(n) = 1.0 + childrenCount(n) * 0.25`
+  - `root` weight is scaled by number of category and about spokes (typically 5).
+  - `category` hubs are scaled by the number of projects in their category.
+  - `project`/`about` nodes have a weight of `1.0` (0 children).
+- **Radial Gravity Scaling**: Dynamic radial force strength (gravity) is scaled by `weight(n)` to keep heavy hubs from being pushed out of the inner circle by their project clusters.
+- **Repulsive Charge Scaling**: Many-body charge force is scaled by `weight(n)` so that heavier category hubs with larger clusters repel other hubs more strongly, carving out a proportional physical sector in the graph.
+
+Layout behaviors:
+- **web** — center pinned + radial-by-distance + weight-scaled charge/radial forces → centralized organic web.
+- **radial** — strong radial-by-distance + weight-scaled forces → clean concentric rings.
+- **cluster** — each folder anchored around the center. Structural category hubs are pulled to an inner cluster anchor radius (`CLUSTER_R * 0.45`), while project nodes are pulled to the outer cluster radius (`CLUSTER_R`) to form category wings.
+- **tree** — center top, y by distance-from-center + weight-scaled charge → rough top-down hierarchy.
 
 `chooseDefaultLayout(graph)` is the "dynamic default": no cross-links → tree; densely
 interlinked → web; evenly spread → radial; else cluster. The panel's `auto` chip always
 shows this pick; a manual choice overrides the render but not the chip.
 
-## View controls (panel — part 1 built, rest deferred)
+## View controls
 
-`components/ViewControls.tsx` — a collapsible Obsidian-like panel, persisted to
-`localStorage['portfolio:graph:view:v1']` (`{ layout, quietLabels, muteEdges }`).
-
-- **Built:** the layout selector (auto + manual); the two display toggles (quiet
-  labels / muted edges — see Manual control) plus "reset positions" and "replay
-  intro". The opacity/fade sliders were removed 2026-07 in favor of fixed constants;
-  keep the panel toggles-and-chips only — no sliders. Search lives in the sidebar
-  (not this panel); the minimap is its own persistent component.
-- **Still deferred (next pass):** category/tag filters; toggle tag-edges;
-  show/hide orphans. Persist all to `localStorage`.
+`components/ViewControls.tsx` — a collapsible Obsidian-like panel. The display toggles (quiet labels, muted edges) are removed from this panel to keep the interface simple and focused. The panel remains as layout selector, "reset positions", and "replay intro" actions.
 
 ## Repo conventions
 

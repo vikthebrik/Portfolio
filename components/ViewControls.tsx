@@ -14,20 +14,12 @@ export function ViewControls({
   layout,
   autoDefault,
   onLayoutChange,
-  quietLabels,
-  onQuietLabelsChange,
-  muteEdges,
-  onMuteEdgesChange,
   onResetPositions,
   onReplayIntro,
 }: {
   layout: 'auto' | LayoutKind
   autoDefault: LayoutKind // what 'auto' resolves to for this content (always shown on the Auto chip)
   onLayoutChange: (next: 'auto' | LayoutKind) => void
-  quietLabels: boolean
-  onQuietLabelsChange: (value: boolean) => void
-  muteEdges: boolean
-  onMuteEdgesChange: (value: boolean) => void
   onResetPositions: () => void
   onReplayIntro: () => void
 }) {
@@ -69,21 +61,6 @@ export function ViewControls({
                 )
               })}
             </div>
-          </Section>
-
-          <Section label="display">
-            <Toggle
-              label="quiet labels"
-              hint="project names appear on zoom or focus"
-              checked={quietLabels}
-              onChange={onQuietLabelsChange}
-            />
-            <Toggle
-              label="muted edges"
-              hint="resting links stay faint until emphasized"
-              checked={muteEdges}
-              onChange={onMuteEdgesChange}
-            />
           </Section>
 
           <button

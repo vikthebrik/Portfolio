@@ -18,6 +18,7 @@ export type GraphSnapshot = {
   bounds: { w: number; h: number }
   transform: Transform
   center: string | null // the re-rooted node (null = root/overview) → minimap rings it
+  hidden: string[] // unrevealed projects — the minimap mirrors the big graph and skips them
   version: number // bumped on every publish — the minimap's change signal (see Minimap)
 }
 

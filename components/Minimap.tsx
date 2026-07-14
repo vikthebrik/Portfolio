@@ -107,11 +107,23 @@ export function Minimap() {
       bounds: { w: 600, h: 450 },
       transform: { x: 0, y: 0, k: 1 },
       center: null, // detail pages highlight via `currentId`, not the snapshot center
+      hidden: [], // detail pages show the whole territory — the map is how you jump around
       version: 0, // static headless layout — no live updates to signal
     })
   }, [onMainPage, pathname, graph])
 
-  const fit = useMemo(() => makeFit(snapshot?.positions), [snapshot])
+  // On the main page the map mirrors the big graph, so unrevealed projects are
+  // skipped (and excluded from the fit — they sit gathered at their hubs).
+  const hiddenSet = useMemo(() => new Set(snapshot?.hidden ?? []), [snapshot])
+  const fit = useMemo(() => {
+    if (!snapshot) return null
+    if (hiddenSet.size === 0) return makeFit(snapshot.positions)
+    const visible: Positions = {}
+    for (const [id, p] of Object.entries(snapshot.positions)) {
+      if (!hiddenSet.has(id)) visible[id] = p
+    }
+    return makeFit(visible)
+  }, [snapshot, hiddenSet])
 
   // Which node to emphasize: on the main graph, the re-rooted center (from the snapshot);
   // on a detail page, the node whose case study is open.
@@ -200,6 +212,7 @@ export function Minimap() {
           <>
             <g>
               {graph.edges.map((edge) => {
+                if (hiddenSet.has(edge.source) || hiddenSet.has(edge.target)) return null
                 const s = snapshot.positions[edge.source]
                 const t = snapshot.positions[edge.target]
                 if (!s || !t) return null
@@ -221,6 +234,7 @@ export function Minimap() {
             </g>
             <g>
               {graph.nodes.map((n) => {
+                if (hiddenSet.has(n.id)) return null
                 const p = snapshot.positions[n.id]
                 if (!p) return null
                 const c = fit.map(p.x, p.y)

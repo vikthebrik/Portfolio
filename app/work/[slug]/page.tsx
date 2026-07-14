@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { projects } from '#site/content'
 import { MDXContent } from '@/components/MDXContent'
+import { PageNav } from '@/components/PageNav'
 
 // Statically generate one page per project (the `detail` state of the machine).
 export function generateStaticParams() {
@@ -36,7 +37,8 @@ export default async function CaseStudy({
     .filter((p): p is NonNullable<typeof p> => Boolean(p))
 
   return (
-    <article className="mx-auto max-w-2xl px-6 py-16">
+    <article className="mx-auto max-w-2xl px-6 py-8">
+      <PageNav fallback={`/?focus=${project.category}`} />
       <nav aria-label="Breadcrumb" className="text-xs text-faint">
         <Link href="/" className="hover:text-clay">
           portfolio

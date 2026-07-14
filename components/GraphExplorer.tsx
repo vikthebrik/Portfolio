@@ -39,12 +39,15 @@ const defaultView = (): ViewState => ({
 })
 
 /**
- * Drives the one-web model plus the view controls. The full graph is always rendered;
- * selecting a node **re-roots** the layout on it (pins it, rings the web by distance from
- * it, glides the camera to frame it) and softly emphasizes its cluster — the rest fades
- * but stays on screen (no filtering). `center` is synced to the URL as `?focus=<id>`, so
- * browser Back/Forward (and the in-graph ‹ › buttons) traverse the history for free.
- * `view` (layout + display toggles) persists to localStorage.
+ * Drives the one-web model plus the view controls. The full graph is always the
+ * resting state; the `revealed` set below is the *bloom engine* — empty only while
+ * the launch intro's skeleton stage plays, then flipped to every project so they
+ * fan out of their hubs (ForceGraph's reveal-sync grows newcomers in place).
+ * Selecting a node **re-roots** the layout on it (pins it, rings the web by distance
+ * from it, glides the camera to frame it) and softly emphasizes its cluster. `center`
+ * is synced to the URL as `?focus=<id>`, so browser Back/Forward (and the in-graph
+ * ‹ › buttons) traverse the history for free. `view` (layout + display toggles)
+ * persists to localStorage.
  */
 export function GraphExplorer({ graph }: { graph: Graph }) {
   const router = useRouter()
@@ -53,8 +56,15 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
   const [center, setCenterState] = useState<string | null>(null)
   const [view, setView] = useState<ViewState>(defaultView)
   const [query, setQuery] = useState('')
+  const [revealed, setRevealed] = useState<ReadonlySet<string>>(() => new Set())
   const [remountKey, setRemountKey] = useState(0)
   const loaded = useRef(false)
+
+  const allProjects = useMemo(
+    () =>
+      new Set(graph.nodes.filter((n) => n.type === 'project').map((n) => n.id)),
+    [graph],
+  )
 
   const setCenter = useCallback((next: string | null) => {
     setCenterState(next)
@@ -72,18 +82,22 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
   const introTimers = useRef<number[]>([])
   const [hint, setHint] = useState(false)
 
-  const finishIntro = useCallback((showHint: boolean) => {
-    for (const t of introTimers.current) window.clearTimeout(t)
-    introTimers.current = []
-    setIntro(INTRO_DONE)
-    setIntroActive(false)
-    if (showHint) setHint(true)
-    try {
-      window.sessionStorage.setItem(INTRO_SEEN_KEY, '1')
-    } catch {
-      /* storage blocked — it'll just run again next load */
-    }
-  }, [])
+  const finishIntro = useCallback(
+    (showHint: boolean) => {
+      for (const t of introTimers.current) window.clearTimeout(t)
+      introTimers.current = []
+      setIntro(INTRO_DONE)
+      setRevealed(allProjects) // fast-forward included: the full web is the end state
+      setIntroActive(false)
+      if (showHint) setHint(true)
+      try {
+        window.sessionStorage.setItem(INTRO_SEEN_KEY, '1')
+      } catch {
+        /* storage blocked — it'll just run again next load */
+      }
+    },
+    [allProjects],
+  )
 
   // Stage 0 is a *launch screen* — it holds until the visitor clicks (the
   // button, or anywhere). Launching releases the frozen sim (stage 1: the web
@@ -91,6 +105,7 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
   useEffect(() => {
     if (!shouldRunIntro()) {
       setIntro(INTRO_DONE)
+      setRevealed(allProjects) // no intro → the full web, immediately
       return
     }
     setIntroActive(true)
@@ -99,6 +114,7 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
       for (const t of introTimers.current) window.clearTimeout(t)
       setIntroActive(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const launched = useRef(false)
@@ -106,17 +122,25 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
     if (launched.current) return
     launched.current = true
     setIntro(1)
+    // Stage 1: the skeleton grows slowly out of the button. Stage 2: every project
+    // blooms out of its hub (the reveal below) while the chrome fades in. Done is
+    // timed past the last project's stagger so nothing snaps mid-growth.
     introTimers.current = [
-      window.setTimeout(() => setIntro(2), 1800),
-      window.setTimeout(() => finishIntro(true), 4000),
+      window.setTimeout(() => {
+        setIntro(2)
+        setRevealed(allProjects)
+      }, 3000),
+      window.setTimeout(() => finishIntro(true), 7400),
     ]
-  }, [finishIntro])
+  }, [finishIntro, allProjects])
 
-  // Replay the launch sequence on demand (view panel → "replay intro").
+  // Replay the launch sequence on demand (view panel → "replay intro"): back to
+  // blank paper, everything regrows.
   const replayIntro = useCallback(() => {
     setCenter(null)
     setQuery('')
     setHint(false)
+    setRevealed(new Set())
     launched.current = false
     setIntroActive(true)
     setIntro(0)
@@ -138,7 +162,7 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
     if (center || query) setHint(false)
   }, [center, query])
 
-  // Init from URL + localStorage after mount (avoids SSR/CSR hydration mismatch).
+  // Init from URL + storage after mount (avoids SSR/CSR hydration mismatch).
   useEffect(() => {
     setCenterState(readCenterFromUrl(graph))
     const onPop = () => setCenterState(readCenterFromUrl(graph))
@@ -192,13 +216,12 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
           router.push(node.url ?? '/about')
           break
         case 'project':
-          // First click re-roots on the project; clicking the centered one opens it.
-          if (center === node.id) router.push(node.url ?? `/work/${node.id}`)
-          else setCenter(node.id)
+          setCenter(node.id)
+          router.push(node.url ?? `/work/${node.id}`)
           break
       }
     },
-    [router, setCenter, center],
+    [router, setCenter],
   )
 
   const centerNode = useMemo(
@@ -309,17 +332,11 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
         >
           <GraphNav graph={graph} center={center} onCenter={setCenter} onReplayIntro={replayIntro} />
           <ViewControls
-          layout={view.layout}
-          autoDefault={autoDefault}
-          onLayoutChange={(next) => setView((v) => ({ ...v, layout: next }))}
-          quietLabels={view.quietLabels}
-          onQuietLabelsChange={(val) =>
-            setView((v) => ({ ...v, quietLabels: val }))
-          }
-          muteEdges={view.muteEdges}
-          onMuteEdgesChange={(val) => setView((v) => ({ ...v, muteEdges: val }))}
-          onResetPositions={resetPositions}
-          onReplayIntro={replayIntro}
+            layout={view.layout}
+            autoDefault={autoDefault}
+            onLayoutChange={(next) => setView((v) => ({ ...v, layout: next }))}
+            onResetPositions={resetPositions}
+            onReplayIntro={replayIntro}
           />
         </div>
         {/* <main> is already hidden below md; skip mounting the simulation
@@ -334,6 +351,7 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
             center={center}
             query={query}
             intro={intro}
+            revealed={revealed}
             onActivateNode={activateNode}
           />
         )}

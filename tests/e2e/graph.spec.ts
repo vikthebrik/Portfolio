@@ -16,6 +16,9 @@ test.describe('the graph', () => {
     // Structural nodes (6) plus at least one project per populated hub.
     const count = await graph.locator('[data-node]').count()
     expect(count).toBeGreaterThanOrEqual(8)
+    // Projects are visible at rest (the intro-less path shows the settled web).
+    const project = graph.locator('[data-node][aria-label="MCC Scheduler"]')
+    await expect(project).not.toHaveCSS('opacity', '0')
   })
 
   test('clicking a hub re-roots the web and syncs the URL', async ({ page }) => {
@@ -57,6 +60,7 @@ test.describe('the sidebar', () => {
   test('search filters the tree to matches', async ({ page }) => {
     await page.goto('/')
     const tree = page.getByRole('navigation', { name: 'Project tree' })
+    await tree.getByRole('button', { name: 'Expand tech' }).click()
     await expect(tree.getByRole('link', { name: 'MCC Scheduler' })).toBeVisible()
 
     await page.getByRole('searchbox', { name: 'Search projects' }).fill('knight')
@@ -83,6 +87,7 @@ test.describe('the sidebar', () => {
 
     // Clicking the active chip clears the filter.
     await page.locator('aside').getByRole('button', { name: '#python' }).click()
+    await tree.getByRole('button', { name: 'Expand tech' }).click()
     await expect(tree.getByRole('link', { name: 'MCC Scheduler' })).toBeVisible()
   })
 })
@@ -103,9 +108,11 @@ test.describe('the terminal', () => {
 test.describe('the command palette', () => {
   test('⌘K opens it; typing + Enter jumps to a case study', async ({ page }) => {
     await page.goto('/')
-    await page.keyboard.press('ControlOrMeta+k')
     const palette = page.getByRole('dialog', { name: 'Command palette' })
-    await expect(palette).toBeVisible()
+    await expect(async () => {
+      await page.keyboard.press('ControlOrMeta+k')
+      await expect(palette).toBeVisible({ timeout: 1000 })
+    }).toPass()
 
     await palette.getByRole('textbox').fill('knight')
     await palette.getByRole('textbox').press('Enter')
@@ -133,6 +140,22 @@ test.describe('pages', () => {
     await expect(page.getByRole('link', { name: 'resume' })).toBeVisible()
   })
 
+  test('detail pages carry dedicated back + home buttons', async ({ page }) => {
+    // `back` uses real history when there is any.
+    await page.goto('/about')
+    await page.goto('/work/mcc-scheduler')
+    const nav = page.getByRole('navigation', { name: 'Page navigation' })
+    await nav.getByRole('button', { name: '‹ back' }).click()
+    await expect(page).toHaveURL(/\/about$/)
+
+    // `home` always returns to the overview.
+    await page
+      .getByRole('navigation', { name: 'Page navigation' })
+      .getByRole('link', { name: '⌂ home' })
+      .click()
+    await expect(page).toHaveURL(/\/$/)
+  })
+
   test('a case study renders content and the minimap', async ({ page }) => {
     await page.goto('/work/mcc-scheduler')
     await expect(page.getByRole('heading', { level: 1 })).toContainText('MCC Scheduler')
@@ -154,8 +177,10 @@ test.describe('mobile', () => {
   test('collapses to the sidebar list — no force graph', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByRole('img', { name: /graph of projects/i })).toBeHidden()
+    const tree = page.getByRole('navigation', { name: 'Project tree' })
+    await tree.getByRole('button', { name: 'Expand tech' }).click()
     await expect(
-      page.getByRole('navigation', { name: 'Project tree' }).getByRole('link', { name: 'MCC Scheduler' })
+      tree.getByRole('link', { name: 'MCC Scheduler' })
     ).toBeVisible()
   })
 })

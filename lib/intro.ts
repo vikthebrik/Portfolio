@@ -11,14 +11,19 @@ import { useSyncExternalStore } from 'react'
  * the run/skip predicate, and a tiny external store so global chrome mounted
  * outside the explorer's tree (minimap, terminal tab) can hide while it runs.
  *
- * Stages: -1 pending (deciding, everything hidden) → 0 name types → 1 root +
- * hubs bloom → 2 projects + cross-links + chrome → 3 done. 3 is also the skip
- * state — reduced motion, mobile, deep links, and repeat visits this session
- * all jump straight there.
+ * Stages: -1 pending (deciding, everything hidden) → 0 name types → 1 the
+ * skeleton (root + hubs + about) grows slowly out of the launch button →
+ * 2 every project blooms out of its hub (the `revealed` set in GraphExplorer
+ * flips to all) while the chrome fades in → 3 done. 3 is also the skip state —
+ * reduced motion, mobile, deep links, and repeat visits this session all jump
+ * straight there (full web, no animation).
  */
 
 export const INTRO_SEEN_KEY = 'portfolio:intro:seen:v1'
 export const INTRO_DONE = 3
+// The launch button's root-node circle. ForceGraph measures it to seed the bloom
+// exactly there, so the button visibly *becomes* the root node.
+export const INTRO_BUTTON_ID = 'intro-launch-node'
 
 export function shouldRunIntro(): boolean {
   if (typeof window === 'undefined') return false

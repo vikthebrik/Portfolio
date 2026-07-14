@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { INTRO_BUTTON_ID } from '@/lib/intro'
 import { IDENTITY } from '@/lib/links'
 
 /**
@@ -11,7 +12,10 @@ import { IDENTITY } from '@/lib/links'
  * this exact spot: the overlay is `fixed` and viewport-centered (the sidebar
  * is invisible during the intro but still reserves its column, so centering in
  * the pane reads off-center), and ForceGraph seeds the bloom at the same
- * viewport center. At stage 1 the overlay fades; by stage 2 it unmounts.
+ * viewport center. The button circle is sized to the root node's rendered
+ * radius and hides *instantly* at stage 1 — the graph root appears at the same
+ * spot the same frame, so the button visibly becomes the node — while the text
+ * fades; by stage 2 the overlay unmounts.
  */
 export function IntroOverlay({
   stage,
@@ -70,8 +74,15 @@ export function IntroOverlay({
         aria-label="Launch the project graph"
         className={`group mt-10 flex cursor-pointer flex-col items-center gap-3 px-8 py-5 outline-none focus:outline-none focus-visible:!outline-none overflow-visible transition-opacity delay-500 duration-700 ${revealed}`}
       >
-        {/* The root node, waiting — the web grows out of this circle. */}
-        <span className="block h-7 w-7 rounded-full bg-ink transition-transform duration-300 group-hover:scale-110 group-focus-visible:ring-2 group-focus-visible:ring-clay group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-paper" />
+        {/* The root node, waiting — the web grows out of this circle. h-8 w-8
+            matches the root's rendered radius (16) at k=1, and the instant
+            (untransitioned) hide at stage 1 is the button→node handoff. */}
+        <span
+          id={INTRO_BUTTON_ID}
+          className={`block h-8 w-8 rounded-full bg-ink transition-transform duration-300 group-hover:scale-110 group-focus-visible:ring-2 group-focus-visible:ring-clay group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-paper ${
+            stage >= 1 ? 'opacity-0' : ''
+          }`}
+        />
         <span className="font-mono text-xs text-muted transition-colors group-hover:text-clay group-focus-visible:text-clay">
           click to launch ↵
         </span>

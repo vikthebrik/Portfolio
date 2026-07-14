@@ -33,7 +33,7 @@ const LINK_DISTANCE: Record<EdgeKind, number> = {
   tag: 260,
 }
 
-const RING = 215 // radius added per layer (web/radial)
+const RING = 245 // radius added per layer (web/radial)
 const ROW = 155 // vertical gap per layer (tree)
 const CLUSTER_R = 285 // distance of each folder anchor from center (cluster)
 
@@ -117,6 +117,26 @@ function bfsDistances(
   return dist
 }
 
+/**
+ * Calculates a node's physical weight (inertia) based on its "children" (spokes or projects).
+ * This acts as the node's gravity: nodes with many children are heavier, allowing them to
+ * resist layout distortion from local repulsion and stay centered on their concentric rings.
+ * - Root node weight: base of 1.0 + 0.25 * spokeCount (typically 5 spokes)
+ * - Category hub weight: base of 1.0 + 0.25 * projectCount (count of projects in that category)
+ * - Projects/About weight: 1.0 (no children)
+ */
+export function nodeWeight(n: SimNode, nodes: SimNode[]): number {
+  if (n.type === 'root') {
+    const spokes = nodes.filter((x) => x.type === 'category' || x.type === 'about').length
+    return 1.0 + spokes * 0.25
+  }
+  if (n.type === 'category') {
+    const projects = nodes.filter((x) => x.type === 'project' && x.category === n.id).length
+    return 1.0 + projects * 0.25
+  }
+  return 1.0
+}
+
 /** (Re)configure `sim`'s forces for the given layout. Call then `sim.alpha(x).restart()`. */
 export function applyLayout(
   sim: Simulation<SimNode, undefined>,
@@ -132,6 +152,13 @@ export function applyLayout(
   const dist = bfsDistances(sim.nodes(), edges, center)
   const depthOf = (n: SimNode) => dist.get(n.id) ?? n.layer
 
+  // Pre-calculate weights for all nodes based on their children count
+  const nodesList = sim.nodes()
+  const weights = new Map<string, number>(
+    nodesList.map((n) => [n.id, nodeWeight(n, nodesList)]),
+  )
+  const weightOf = (n: SimNode) => weights.get(n.id) ?? 1.0
+
   // Shared forces: links (per-kind distance; strength dialed down where a positional
   // force should dominate) and collision.
   const linkStrengthScale = kind === 'radial' ? 0.3 : kind === 'tree' ? 0.4 : 1
@@ -142,7 +169,7 @@ export function applyLayout(
       .distance((_l, i) => LINK_DISTANCE[edges[i].kind])
       .strength((_l, i) => edges[i].weight * linkStrengthScale),
   )
-  sim.force('collide', forceCollide<SimNode>((n) => nodeRadius(n) + 52))
+  sim.force('collide', forceCollide<SimNode>((n) => nodeRadius(n) + 62))
 
   // Clear positional forces; each layout re-adds only what it uses.
   sim.force('charge', null)
@@ -167,45 +194,60 @@ export function applyLayout(
 
   switch (kind) {
     case 'web':
-      // Centralized organic web: mild radial rings keep it centered on the center node,
-      // links still bend it into a mesh. (This is the fix for the old "chain" layout.)
-      sim.force('charge', forceManyBody<SimNode>().strength(-560))
+      // Centralized organic web: radial gravity pulls nodes toward their concentric ring.
+      // We scale the radial strength (gravity) and many-body charge (repulsion) by the node weight
+      // (based on children count) to keep the hubs on the inner ring and projects on the outer web.
+      sim.force(
+        'charge',
+        forceManyBody<SimNode>().strength((n) => -680 * weightOf(n)),
+      )
       sim.force(
         'radial',
-        forceRadial<SimNode>((n) => depthOf(n) * RING, cx, cy).strength(0.18),
+        forceRadial<SimNode>((n) => depthOf(n) * RING, cx, cy).strength((n) => 0.18 * weightOf(n)),
       )
       break
 
     case 'radial':
-      // Clean concentric rings by depth-from-center; charge spreads nodes *around* each
-      // ring so they don't pile on one side, while weak links let the radius dominate.
-      sim.force('charge', forceManyBody<SimNode>().strength(-320))
+      // Clean concentric rings by depth-from-center; charge spreads nodes *around* each ring.
+      // Radial gravity and charge are scaled by node weight so the category hubs remain stabilized on the
+      // inner ring.
+      sim.force(
+        'charge',
+        forceManyBody<SimNode>().strength((n) => -420 * weightOf(n)),
+      )
       sim.force(
         'radial',
-        forceRadial<SimNode>((n) => depthOf(n) * RING, cx, cy).strength(0.95),
+        forceRadial<SimNode>((n) => depthOf(n) * RING, cx, cy).strength((n) => 0.95 * weightOf(n)),
       )
       break
 
     case 'cluster': {
-      // Group by folder: each category has an anchor around the center; nodes are
-      // pulled toward their folder's anchor (structural nodes toward center).
+      // Group by folder: each category has an anchor around the center.
+      // Structural nodes (hubs) are pulled toward an inner anchor radius, while project nodes
+      // are pulled toward the outer cluster radius to form category wings.
       const anchor = (n: SimNode) => {
         if (!n.category) return { x: cx, y: cy }
         const i = CATEGORIES.indexOf(n.category as Category)
         const a = (i / CATEGORIES.length) * 2 * Math.PI - Math.PI / 2
-        return { x: cx + Math.cos(a) * CLUSTER_R, y: cy + Math.sin(a) * CLUSTER_R }
+        const r = n.type === 'category' ? CLUSTER_R * 0.45 : CLUSTER_R
+        return { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r }
       }
-      sim.force('charge', forceManyBody<SimNode>().strength(-260))
-      sim.force('x', forceX<SimNode>((n) => anchor(n).x).strength(0.55))
-      sim.force('y', forceY<SimNode>((n) => anchor(n).y).strength(0.55))
+      sim.force(
+        'charge',
+        forceManyBody<SimNode>().strength((n) => -320 * weightOf(n)),
+      )
+      sim.force('x', forceX<SimNode>((n) => anchor(n).x).strength((n) => 0.55 * weightOf(n)))
+      sim.force('y', forceY<SimNode>((n) => anchor(n).y).strength((n) => 0.55 * weightOf(n)))
       break
     }
 
     case 'tree':
-      // Rough top-down hierarchy rooted at the center: y by distance-from-center, mild
-      // charge spreads siblings in x, a weak x-pull keeps it centered. A force
-      // approximation, not a tidy tree.
-      sim.force('charge', forceManyBody<SimNode>().strength(-260))
+      // Rough top-down hierarchy rooted at the center: y by distance-from-center.
+      // Weight-based charge keeps heavier hubs adequately separated.
+      sim.force(
+        'charge',
+        forceManyBody<SimNode>().strength((n) => -320 * weightOf(n)),
+      )
       sim.force('y', forceY<SimNode>((n) => anchorY + depthOf(n) * ROW).strength(0.7))
       sim.force('x', forceX<SimNode>(cx).strength(0.05))
       break

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useSyncExternalStore } from 'react'
+import { useMemo, useRef, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { CATEGORIES, type Category } from '@/lib/categories'
 import type { Graph, GraphNode } from '@/lib/graph'
@@ -36,56 +36,6 @@ const Dot = ({ className = '' }: { className?: string }) => (
   </svg>
 )
 
-// Collapse state — persisted, but internal to Sidebar (no props needed). Follows
-// lib/intro.ts's useSyncExternalStore idiom rather than setState-in-effect, since
-// this file isn't in the React-Compiler-rule exemption list in eslint.config.mjs.
-const COLLAPSED_KEY = 'portfolio:sidebar:collapsed:v1'
-const EMPTY: readonly string[] = []
-let collapsedIds: readonly string[] = EMPTY
-let hydrated = false
-const listeners = new Set<() => void>()
-
-function ensureHydrated() {
-  if (hydrated || typeof window === 'undefined') return
-  hydrated = true
-  try {
-    const saved = window.localStorage.getItem(COLLAPSED_KEY)
-    if (saved) {
-      const parsed = JSON.parse(saved) as string[]
-      collapsedIds = parsed.filter((c) => (CATEGORIES as readonly string[]).includes(c))
-    }
-  } catch {
-    /* ignore malformed/blocked storage */
-  }
-}
-
-function toggleCollapsed(category: Category) {
-  const next = collapsedIds.includes(category)
-    ? collapsedIds.filter((c) => c !== category)
-    : [...collapsedIds, category]
-  collapsedIds = next
-  try {
-    window.localStorage.setItem(COLLAPSED_KEY, JSON.stringify(next))
-  } catch {
-    /* ignore blocked storage */
-  }
-  for (const l of listeners) l()
-}
-
-const subscribeCollapsed = (l: () => void) => {
-  listeners.add(l)
-  return () => listeners.delete(l)
-}
-const getCollapsedSnapshot = () => {
-  ensureHydrated()
-  return collapsedIds
-}
-const getCollapsedServerSnapshot = () => EMPTY
-
-function useCollapsed(): readonly string[] {
-  return useSyncExternalStore(subscribeCollapsed, getCollapsedSnapshot, getCollapsedServerSnapshot)
-}
-
 export function Sidebar({
   graph,
   center,
@@ -102,7 +52,43 @@ export function Sidebar({
   activeSlug?: string
 }) {
   const q = query.trim().toLowerCase()
-  const collapsed = useCollapsed()
+  const [openCategories, setOpenCategories] = useState<Category[]>([])
+  const navRef = useRef<HTMLElement>(null)
+
+  // Auto open the folder for the selected node (and close others)
+  useEffect(() => {
+    const targetId = activeSlug || center
+    if (targetId && targetId !== 'root') {
+      const activeProj = graph.nodes.find((n) => n.id === targetId && n.type === 'project')
+      const cat = activeProj
+        ? (activeProj.category as Category)
+        : (CATEGORIES.includes(targetId as Category) ? (targetId as Category) : null)
+      if (cat) {
+        setOpenCategories([cat])
+      }
+    } else {
+      setOpenCategories([])
+    }
+  }, [center, activeSlug, graph.nodes])
+
+  // Scroll the selected node into view in the sidebar
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const activeEl = navRef.current?.querySelector('[aria-current="true"], [aria-current="page"]')
+      if (activeEl) {
+        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }
+    }, 50)
+    return () => clearTimeout(timer)
+  }, [center, activeSlug])
+
+  const toggleCollapsed = (category: Category) => {
+    setOpenCategories((prev) =>
+      prev.includes(category)
+        ? prev.filter((c) => c !== category)
+        : [...prev, category],
+    )
+  }
 
   // Skills strip — the recurring tags across projects, straight from frontmatter
   // (auto-derived, like everything else). Each chip is a canned search: clicking
@@ -142,7 +128,7 @@ export function Sidebar({
     (isActive ? 'bg-clay-soft/40 text-clay' : 'hover:bg-surface/50 hover:text-clay')
 
   return (
-    <nav aria-label="Project tree" className="text-sm leading-7">
+    <nav ref={navRef} aria-label="Project tree" className="text-sm leading-7">
       <input
         type="search"
         value={query}
@@ -189,8 +175,7 @@ export function Sidebar({
           const containsActive = projects.some(
             (p) => p.id === center || p.id === activeSlug,
           )
-          const userCollapsed = collapsed.includes(category)
-          const open = Boolean(q) || category === center || containsActive || !userCollapsed
+          const open = Boolean(q) || category === center || containsActive || openCategories.includes(category)
 
           return (
             <li key={category} className="mt-1">
@@ -226,9 +211,7 @@ export function Sidebar({
                     <li key={project.id}>
                       <Link
                         href={project.url ?? `/work/${project.id}`}
-                        aria-current={
-                          project.id === activeSlug ? 'page' : undefined
-                        }
+                        aria-current={active ? 'true' : undefined}
                         className={`${row(active)} pl-7 pr-2 ${
                           active ? '' : 'text-muted'
                         }`}
