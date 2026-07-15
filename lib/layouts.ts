@@ -53,6 +53,21 @@ export const nodeRadius = (n: GraphNode): number => {
 }
 
 /**
+ * Calculates a node's collision radius accounting for its physical "volume" (including text label).
+ * Since monospace labels are rendered horizontally, longer labels require a larger collision radius
+ * to prevent text overlap.
+ */
+export const nodeCollisionRadius = (n: GraphNode): number => {
+  const baseRad = nodeRadius(n)
+  // Monospace font character width is roughly 6.5px at text-xs/sm.
+  // The label is centered under the node, so its horizontal reach is half its width.
+  const labelReach = n.label.length * 3.25
+  // Collision padding: base radius + padding to clear the label vertically,
+  // or the label's horizontal reach + side margins.
+  return Math.max(baseRad + 48, labelReach + 15)
+}
+
+/**
  * Content-based default: the "dynamic default" the user layers manual choice on top of.
  *   - no cross-links at all           → tree    (a pure hierarchy)
  *   - densely interlinked projects     → web     (show the web)
@@ -169,7 +184,7 @@ export function applyLayout(
       .distance((_l, i) => LINK_DISTANCE[edges[i].kind])
       .strength((_l, i) => edges[i].weight * linkStrengthScale),
   )
-  sim.force('collide', forceCollide<SimNode>((n) => nodeRadius(n) + 62))
+  sim.force('collide', forceCollide<SimNode>((n) => nodeCollisionRadius(n)))
 
   // Clear positional forces; each layout re-adds only what it uses.
   sim.force('charge', null)

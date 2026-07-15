@@ -7,7 +7,7 @@ import { zoom as d3zoom, zoomIdentity, type ZoomBehavior } from 'd3-zoom'
 import { CATEGORIES } from '@/lib/categories'
 import { ROOT_ID, ABOUT_ID, type EdgeKind, type Graph, type GraphNode, type GraphEdge } from '@/lib/graph'
 import { INTRO_BUTTON_ID } from '@/lib/intro'
-import { applyLayout, nodeRadius, layoutAnchor, type LayoutKind, type SimNode } from '@/lib/layouts'
+import { applyLayout, nodeRadius, layoutAnchor, nodeCollisionRadius, type LayoutKind, type SimNode } from '@/lib/layouts'
 import { useGraphBridge, type Transform } from './GraphBridge'
 
 type SimLink = Omit<GraphEdge, 'source' | 'target'> & {
@@ -302,7 +302,7 @@ export function ForceGraph({
       n.type === 'project' && !shownRef.current.has(n.id)
     sim.force(
       'collide',
-      forceCollide<SimNode>((n) => (hiddenProject(n) ? 0 : nodeRadius(n) + 52)),
+      forceCollide<SimNode>((n) => (hiddenProject(n) ? 0 : nodeCollisionRadius(n))),
     )
     const linkForce = sim.force('link') as ForceLink<SimNode, SimLink> | undefined
     if (linkForce) {

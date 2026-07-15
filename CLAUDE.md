@@ -297,6 +297,7 @@ To keep category hubs on the inner level and projects on the outer web organical
   - `project`/`about` nodes have a weight of `1.0` (0 children).
 - **Radial Gravity Scaling**: Dynamic radial force strength (gravity) is scaled by `weight(n)` to keep heavy hubs from being pushed out of the inner circle by their project clusters.
 - **Repulsive Charge Scaling**: Many-body charge force is scaled by `weight(n)` so that heavier category hubs with larger clusters repel other hubs more strongly, carving out a proportional physical sector in the graph.
+- **Text-Volume Collision Radius**: Monospace text labels are rendered horizontally below the node. To prevent labels from overlapping and becoming unreadable, the collision radius `nodeCollisionRadius(n)` scales dynamically with the text width: `Math.max(nodeRadius(n) + 48, label.length * 3.25 + 15)`. Nodes with longer labels automatically push neighbors further away to accommodate their horizontal text volume.
 
 Layout behaviors:
 - **web** — center pinned + radial-by-distance + weight-scaled charge/radial forces → centralized organic web.
