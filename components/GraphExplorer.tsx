@@ -30,12 +30,14 @@ type ViewState = {
   layout: 'auto' | LayoutKind
   quietLabels: boolean // hide project labels at overview zoom (appear on zoom/hover/focus)
   muteEdges: boolean // resting edges stay faint until a cluster is emphasized
+  cameraNav: boolean // selection glides the camera over a stable web; off = re-root reheat
 }
 
 const defaultView = (): ViewState => ({
   layout: 'auto',
   quietLabels: true,
   muteEdges: true,
+  cameraNav: true,
 })
 
 /**
@@ -43,11 +45,12 @@ const defaultView = (): ViewState => ({
  * resting state; the `revealed` set below is the *bloom engine* — empty only while
  * the launch intro's skeleton stage plays, then flipped to every project so they
  * fan out of their hubs (ForceGraph's reveal-sync grows newcomers in place).
- * Selecting a node **re-roots** the layout on it (pins it, rings the web by distance
- * from it, glides the camera to frame it) and softly emphasizes its cluster. `center`
- * is synced to the URL as `?focus=<id>`, so browser Back/Forward (and the in-graph
- * ‹ › buttons) traverse the history for free. `view` (layout + display toggles)
- * persists to localStorage.
+ * Selecting a node frames it: by default (camera nav) the web never rearranges — the
+ * camera glides + gently zooms to the node's cluster and softly emphasizes it; with
+ * camera nav off, selection **re-roots** the layout on the node instead (pins it,
+ * rings the web by distance from it). `center` is synced to the URL as `?focus=<id>`,
+ * so browser Back/Forward (and the in-graph ‹ › buttons) traverse the history for
+ * free. `view` (layout + display toggles) persists to localStorage.
  */
 export function GraphExplorer({ graph }: { graph: Graph }) {
   const router = useRouter()
@@ -178,6 +181,7 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
           layout: parsed.layout ?? d.layout,
           quietLabels: parsed.quietLabels ?? d.quietLabels,
           muteEdges: parsed.muteEdges ?? d.muteEdges,
+          cameraNav: parsed.cameraNav ?? d.cameraNav,
         })
       }
     } catch {
@@ -221,7 +225,7 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
           break
       }
     },
-    [router, setCenter],
+    [router, setCenter, center],
   )
 
   const centerNode = useMemo(
@@ -334,7 +338,9 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
           <ViewControls
             layout={view.layout}
             autoDefault={autoDefault}
+            cameraNav={view.cameraNav}
             onLayoutChange={(next) => setView((v) => ({ ...v, layout: next }))}
+            onToggleCameraNav={(next) => setView((v) => ({ ...v, cameraNav: next }))}
             onResetPositions={resetPositions}
             onReplayIntro={replayIntro}
           />
@@ -348,6 +354,7 @@ export function GraphExplorer({ graph }: { graph: Graph }) {
             layout={resolvedLayout}
             quietLabels={view.quietLabels}
             muteEdges={view.muteEdges}
+            cameraNav={view.cameraNav}
             center={center}
             query={query}
             intro={intro}

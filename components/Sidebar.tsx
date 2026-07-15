@@ -55,21 +55,23 @@ export function Sidebar({
   const [openCategories, setOpenCategories] = useState<Category[]>([])
   const navRef = useRef<HTMLElement>(null)
 
-  // Auto open the folder for the selected node (and close others)
-  useEffect(() => {
-    const targetId = activeSlug || center
+  // Auto open the folder for the selected node (and close others). Adjusted during
+  // render (guarded by the previous target) rather than in an effect, so the tree
+  // never paints a frame with the stale folder open.
+  const targetId = activeSlug || center
+  const [prevTargetId, setPrevTargetId] = useState<string | null | undefined>(undefined)
+  if (targetId !== prevTargetId) {
+    setPrevTargetId(targetId)
     if (targetId && targetId !== 'root') {
       const activeProj = graph.nodes.find((n) => n.id === targetId && n.type === 'project')
       const cat = activeProj
         ? (activeProj.category as Category)
         : (CATEGORIES.includes(targetId as Category) ? (targetId as Category) : null)
-      if (cat) {
-        setOpenCategories([cat])
-      }
+      if (cat) setOpenCategories([cat])
     } else {
       setOpenCategories([])
     }
-  }, [center, activeSlug, graph.nodes])
+  }
 
   // Scroll the selected node into view in the sidebar
   useEffect(() => {

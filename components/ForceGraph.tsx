@@ -41,6 +41,13 @@ const GLIDE_MS = 900
 const easeInOutCubic = (p: number) =>
   p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2
 
+// Camera-nav tuning (the default navigation mode: the layout never rearranges,
+// the camera glides + gently zooms to frame the selected cluster).
+const CAMERA_PAD = 90 // graph-units of breathing room around the framed cluster
+const CLUSTER_K = [0.65, 1.6] as const // gentle zoom band for a cluster fit — never extreme
+const OVERVIEW_K = [0.4, 1] as const // overview zooms out to fit the whole web
+const K_KEEP_BAND = 0.2 // within ±20% of the fit: keep the visitor's zoom, pan only
+
 // Growth pacing. The intro is the slowest, dreamiest version; in-session reveals
 // (a hub's projects budding on demand) use the same shapes at a more responsive
 // tempo. Node scale + opacity fades + edge draw-on all share these beats.
@@ -114,6 +121,7 @@ export function ForceGraph({
   layout,
   quietLabels,
   muteEdges,
+  cameraNav,
   center,
   query,
   intro,
@@ -124,7 +132,8 @@ export function ForceGraph({
   layout: LayoutKind
   quietLabels: boolean // project labels hidden at overview zoom; appear on zoom-in/hover/focus
   muteEdges: boolean // resting edges read as a faint constellation until a cluster is emphasized
-  center: string | null // the re-rooted node (null = root/overview): pinned + emphasized
+  cameraNav: boolean // selection moves the camera over a stable layout; off = re-root reheat
+  center: string | null // the selected node (null = root/overview): framed + emphasized
   query: string // search — emphasize matching nodes, dim the rest
   intro: number // launch stage (see lib/intro): -1 pending, 0 name, 1 hubs grow, 2 chrome, 3 done
   revealed: ReadonlySet<string> // projects grown in (empty pre-launch, all once the bloom fires)
@@ -140,6 +149,12 @@ export function ForceGraph({
   layoutRef.current = layout
   const centerRef = useRef(center)
   centerRef.current = center
+  const cameraNavRef = useRef(cameraNav)
+  cameraNavRef.current = cameraNav
+  // In camera mode the layout is always the canonical root-rooted web — only the
+  // camera and the emphasis follow the selection. Re-root mode rings the layout
+  // around the selected node itself.
+  const layoutCenterId = () => (cameraNavRef.current ? null : centerRef.current)
   const introRef = useRef(intro)
   introRef.current = intro
   // While true the sim is built but frozen: the launch intro seeds every node at
@@ -196,22 +211,26 @@ export function ForceGraph({
 
   // Glide the camera so the given graph point ends up framed at the viewport middle.
   // A rAF tween drives d3-zoom's own transform (so its internal state stays in sync and
-  // the next gesture continues cleanly); zoom is held constant so an eased lerp of the
-  // translate is perfectly smooth. Reduced-motion jumps.
-  const flyTo = (gp: { x: number; y: number }) => {
+  // the next gesture continues cleanly). Zoom is held constant unless a target `k` is
+  // passed (camera nav's gentle fit), in which case it eases alongside the translate.
+  // Reduced-motion (or `instant`) jumps.
+  const flyTo = (
+    gp: { x: number; y: number },
+    opts: { k?: number; instant?: boolean } = {},
+  ) => {
     const svg = svgRef.current
     const behavior = zoomBehaviorRef.current
     if (!svg || !behavior) return
     const { w, h } = sizeRef.current
-    const k = transformRef.current.k // keep the current zoom, just recenter
     const from = transformRef.current
-    const to = { x: w / 2 - k * gp.x, y: h / 2 - k * gp.y }
+    const kTo = opts.k ?? from.k
+    const to = { x: w / 2 - kTo * gp.x, y: h / 2 - kTo * gp.y }
     const sel = select(svg)
-    const apply = (x: number, y: number) =>
-      sel.call(behavior.transform, zoomIdentity.translate(x, y).scale(k))
+    const apply = (x: number, y: number, kk: number) =>
+      sel.call(behavior.transform, zoomIdentity.translate(x, y).scale(kk))
 
-    if (prefersReducedMotion()) {
-      apply(to.x, to.y)
+    if (opts.instant || prefersReducedMotion()) {
+      apply(to.x, to.y, kTo)
       return
     }
     const token = glideToken.current
@@ -222,7 +241,10 @@ export function ForceGraph({
       if (glideToken.current !== token || !svg.isConnected) return
       const p = Math.min((now - start) / GLIDE_MS, 1)
       const e = easeInOutCubic(p)
-      apply(from.x + (to.x - from.x) * e, from.y + (to.y - from.y) * e)
+      // Independent eased lerp of translate + scale — not zoom-invariant like
+      // d3.interpolateZoom, but at our gentle k deltas (≤1.6×) it reads smooth.
+      const kk = from.k + (kTo - from.k) * e
+      apply(from.x + (to.x - from.x) * e, from.y + (to.y - from.y) * e, kk)
       if (p < 1) requestAnimationFrame(step)
     }
     requestAnimationFrame(step)
@@ -279,6 +301,40 @@ export function ForceGraph({
     }
     return s
   }, [graph, query])
+
+  // Camera nav: frame the selection without touching the simulation. Fits the
+  // bounding box of the node + its direct neighbors (live positions) at a gently
+  // clamped zoom; null frames the whole web (overview zooms back out). If the
+  // visitor's current zoom is already close to the fit, keep it and pan only.
+  const cameraGlide = (centerId: string | null, instant = false) => {
+    const cluster = centerId
+      ? new Set([centerId, ...(adjacency.get(centerId) ?? [])])
+      : null
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    for (const n of simNodesRef.current) {
+      if (cluster && !cluster.has(n.id)) continue
+      if (n.type === 'project' && !shownRef.current.has(n.id)) continue
+      if (n.x == null || n.y == null) continue
+      minX = Math.min(minX, n.x)
+      minY = Math.min(minY, n.y)
+      maxX = Math.max(maxX, n.x)
+      maxY = Math.max(maxY, n.y)
+    }
+    if (minX > maxX) return // nothing visible to frame
+    const { w, h } = sizeRef.current
+    const fit = Math.min(
+      w / (maxX - minX + CAMERA_PAD * 2),
+      h / (maxY - minY + CAMERA_PAD * 2),
+    )
+    const [lo, hi] = centerId ? CLUSTER_K : OVERVIEW_K
+    let k = clamp(fit, lo, hi)
+    const cur = transformRef.current.k
+    if (Math.abs(cur - k) / k < K_KEEP_BAND) k = cur
+    flyTo({ x: (minX + maxX) / 2, y: (minY + maxY) / 2 }, { k, instant })
+  }
 
   const reapplySavedPins = (nodes: SimNode[]) => {
     const saved = loadPositions()
@@ -348,7 +404,7 @@ export function ForceGraph({
 
     const sim = forceSimulation(nodes)
     simRef.current = sim
-    applyLayout(sim, layoutRef.current, { w, h, edges, centerId: centerRef.current })
+    applyLayout(sim, layoutRef.current, { w, h, edges, centerId: layoutCenterId() })
     reapplySavedPins(nodes) // hand-drags win over the layout's center pin
     applyVisibilityForces() // unrevealed projects stay forceless
 
@@ -391,7 +447,7 @@ export function ForceGraph({
         w: nw,
         h: nh,
         edges,
-        centerId: centerRef.current,
+        centerId: layoutCenterId(),
       })
       reapplySavedPins(nodes)
       applyVisibilityForces()
@@ -564,7 +620,7 @@ export function ForceGraph({
     if (!sim || introHeld.current) return // mount-time run during the intro hold
     const { w, h } = sizeRef.current
     const edges = graph.edges.map((e) => ({ ...e }))
-    applyLayout(sim, layout, { w, h, edges, centerId: centerRef.current })
+    applyLayout(sim, layout, { w, h, edges, centerId: layoutCenterId() })
     reapplySavedPins(sim.nodes())
     applyVisibilityForces()
     if (prefersReducedMotion()) {
@@ -576,20 +632,20 @@ export function ForceGraph({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layout])
 
-  // Re-root on the selected node: same forces, new center. Reheat so the layout reforms
+  // Re-root mode's layout move: same forces, new center. Reheat so the layout reforms
   // around it, and glide (never snap) — the pin travels to the anchor and the camera
   // tracks the same target over the same eased duration. The full web stays on screen —
   // nothing is filtered (CLAUDE.md "one living web"); only the anchor + emphasis change.
-  useEffect(() => {
+  const rerootLayout = (centerId: string | null) => {
     const sim = simRef.current
-    if (!sim || introHeld.current) return // mount-time run during the intro hold
+    if (!sim) return
     const { w, h } = sizeRef.current
     const edges = graph.edges.map((e) => ({ ...e }))
-    applyLayout(sim, layoutRef.current, { w, h, edges, centerId: center })
+    applyLayout(sim, layoutRef.current, { w, h, edges, centerId })
     reapplySavedPins(sim.nodes())
     applyVisibilityForces()
     glideToken.current++ // cancel any in-flight glide before starting this one
-    const cnode = simNodesRef.current.find((n) => n.id === (center ?? ROOT_ID))
+    const cnode = simNodesRef.current.find((n) => n.id === (centerId ?? ROOT_ID))
     // Where the pin actually ended up: the layout anchor, or a hand-drag pin that won.
     const to = {
       x: cnode?.fx ?? w / 2,
@@ -604,8 +660,61 @@ export function ForceGraph({
     if (cnode) glidePin(cnode, to)
     sim.alpha(0.5).restart()
     flyTo(to)
+  }
+
+  // Selection changed. Camera nav (default): the web never rearranges — the camera
+  // glides + gently zooms to frame the selected cluster (emphasis rides the same
+  // `center` state). Re-root mode: the layout re-rings around the selection.
+  const firstCenterRun = useRef(true)
+  useEffect(() => {
+    const sim = simRef.current
+    const first = firstCenterRun.current
+    firstCenterRun.current = false
+    if (!sim || introHeld.current) return // mount-time run during the intro hold
+    if (cameraNav) {
+      if (first && center == null) return // resting overview — nothing to frame yet
+      glideToken.current++ // cancel any in-flight glide before starting this one
+      // Mount / deep-link paths promise the *settled* web: if the sim is still
+      // heating (fresh mount, mid-reveal fast-forward), settle it synchronously and
+      // place the camera instantly instead of gliding at a moving target.
+      const unsettled = sim.alpha() > 0.3
+      if (unsettled) {
+        sim.tick(200)
+        setTick((t) => t + 1)
+      }
+      cameraGlide(center, first || unsettled)
+      return
+    }
+    rerootLayout(center)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [center])
+
+  // Mode switch at runtime (view panel). Turning camera nav on restores the canonical
+  // root-rooted web — settled synchronously (a panel action, not a nav gesture) — then
+  // frames the current selection; turning it off resumes re-rooting on the selection.
+  const modeMounted = useRef(false)
+  useEffect(() => {
+    if (!modeMounted.current) {
+      modeMounted.current = true
+      return
+    }
+    const sim = simRef.current
+    if (!sim || introHeld.current) return
+    if (cameraNav) {
+      const { w, h } = sizeRef.current
+      const edges = graph.edges.map((e) => ({ ...e }))
+      applyLayout(sim, layoutRef.current, { w, h, edges, centerId: null })
+      reapplySavedPins(sim.nodes())
+      applyVisibilityForces()
+      glideToken.current++
+      sim.tick(200)
+      setTick((t) => t + 1)
+      cameraGlide(centerRef.current)
+    } else {
+      rerootLayout(centerRef.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cameraNav])
 
   // Replay: when the intro restarts after being done (GraphExplorer's "replay
   // intro"), re-gather the web at the launch spot and freeze again. Declared

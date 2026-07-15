@@ -13,9 +13,12 @@ Obsidian style. The landing view is a single living web centered on a **ROOT nod
 cross-link everything into a web. The full web is the resting state; it *assembles*
 on launch — skeleton first, then every project blooms out of its hub (2026-07: the
 staged grow-out replaced an all-at-once reveal that read as overload). Hovering a
-node highlights its connections and dims the rest; clicking any node **re-roots**
-the web on it (reheats the layout to center on it, glides the camera, emphasizes its
-cluster) while the whole web stays on screen — no filtering. A names-only file tree
+node highlights its connections and dims the rest; clicking any node **frames** it:
+by default the layout never rearranges — the camera glides and gently zooms to the
+node's cluster, emphasizing it (2026-07: camera nav replaced the re-root reheat as
+the default; constant rearrangement broke spatial memory). The whole web stays on
+screen — no filtering. The re-root reheat survives behind the view panel's
+`camera nav` toggle. A names-only file tree
 in the sidebar is the accessible, keyboard-navigable path through everything.
 
 Four top-level categories (hub nodes): `tech`, `design`, `drone`, `research`.
@@ -186,20 +189,24 @@ carries `hidden`) — all of which only matters mid-intro.
   reduced motion, mobile, `?focus=` deep links, and repeat visits (sessionStorage)
   skip straight to the settled web; a click mid-bloom fast-forwards.
 - **overview** — the full web, rooted on `root`. No node is hidden.
-- **re-root** — clicking **any** node (a category hub *or* a project) makes it the new
-  center: the layout reheats so the web rings by graph-distance *from it* (`applyLayout`'s
-  `centerId`), and the motion **glides, never snaps** — the center pin travels from the
-  node's current spot to the layout anchor while the camera tracks the same target, one
-  shared ~900ms eased tween (`GLIDE_MS`; reduced-motion jumps instantly). Its cluster
-  (the node + direct neighbors) is emphasized; everything else fades **by graph-distance
-  from the center** (see "focus fade" below), so same-ring peers — the other hubs — stay
-  readable instead of vanishing. The full web stays on screen — nothing is filtered.
-  Synced to the URL as `?focus=<nodeId>` (a shareable deep link) via the History API,
-  so the graph never remounts and **browser Back/Forward — plus the in-graph `‹ ›`
-  buttons — traverse the re-root history**. Clicking `root`, the centered hub again, or
-  "overview" in the breadcrumb clears back to the root. A *project* takes one click to
-  center; clicking the already-centered project (or the breadcrumb's `open ↵`) opens
-  its case study.
+- **select / frame** — clicking **any** node (a category hub *or* a project) makes it
+  the current center. **Camera nav (default, 2026-07)**: the layout stays the canonical
+  root-rooted web — the simulation is untouched (no reheat, no pin moves) — while the
+  camera glides (~900ms `GLIDE_MS` eased tween; reduced-motion jumps) and *gently*
+  zooms to frame the node + its direct neighbors (fit-to-cluster, clamped to
+  `CLUSTER_K` 0.65–1.6 so it's never extreme; if the visitor's zoom is already within
+  ~20% of the fit, it pans only — never fights their zoom). Clearing to overview eases
+  back out to fit the whole web (`OVERVIEW_K`). **Re-root (toggle off)**: the layout
+  reheats so the web rings by graph-distance *from the selection* (`applyLayout`'s
+  `centerId`), the center pin and camera gliding in lockstep. In both modes the cluster
+  (node + direct neighbors) is emphasized and everything else fades **by graph-distance
+  from the center** (see "focus fade" below — emphasis is pure React state, independent
+  of the layout), and the full web stays on screen — nothing is filtered. Synced to the
+  URL as `?focus=<nodeId>` (a shareable deep link) via the History API, so the graph
+  never remounts and **browser Back/Forward — plus the in-graph `‹ ›` buttons —
+  traverse the history**. Clicking `root`, the centered hub again, or "overview" in the
+  breadcrumb clears back to the root. A *project* takes one click to center; clicking
+  the already-centered project (or the breadcrumb's `open ↵`) opens its case study.
 - **detail** — a project's case study at `/work/[slug]` (RSC, unchanged). `how it
   works` routes to `/about`. Both carry **`components/PageNav.tsx`** (2026-07): a
   sticky `‹ back` / `⌂ home` row above the breadcrumb — `back` uses real history when
@@ -223,10 +230,12 @@ carries `hidden`) — all of which only matters mid-intro.
   `components/GraphBridge.tsx` (a ref-based bridge: snapshot + pan + center channels —
   no re-render storms). Hidden on mobile.
 
-The simulation runs once and is never rebuilt on navigation; a re-root **reheats** it
-(same node objects, new center pin + ring distances) rather than re-running from scratch —
-it only ever changes forces + styling, never node membership. Hand-drag pins still win over
-the center pin. (`focusCategory()` from the old filtered-subgraph model is retired.)
+The simulation runs once and is never rebuilt on navigation. Under camera nav it isn't
+even reheated on selection — only the camera and emphasis move; toggling the mode or
+selecting in re-root mode **reheats** it (same node objects, new center pin + ring
+distances) rather than re-running from scratch — it only ever changes forces + styling,
+never node membership. Hand-drag pins still win over the center pin. (`focusCategory()`
+from the old filtered-subgraph model is retired.)
 
 ## Terminal (the IDE way in)
 
@@ -311,7 +320,11 @@ shows this pick; a manual choice overrides the render but not the chip.
 
 ## View controls
 
-`components/ViewControls.tsx` — a collapsible Obsidian-like panel. The display toggles (quiet labels, muted edges) are removed from this panel to keep the interface simple and focused. The panel remains as layout selector, "reset positions", and "replay intro" actions.
+`components/ViewControls.tsx` — a collapsible Obsidian-like panel: layout selector, the
+**camera nav** toggle (default on, persisted in `view:v1` — off restores the re-root
+reheat), "reset positions", and "replay intro". The display toggles (quiet labels, muted
+edges) stay out of the panel to keep it simple and focused (their state still lives in
+`view:v1`).
 
 ## Repo conventions
 

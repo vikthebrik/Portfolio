@@ -4,22 +4,26 @@ import { useState } from 'react'
 import { LAYOUTS, type LayoutKind } from '@/lib/layouts'
 
 /**
- * Obsidian-style view panel: layout selector + display toggles. The old opacity/fade
- * sliders are gone — projects opacity and focus fade are fixed constants in ForceGraph;
- * the toggles are the remaining experiments (quiet labels, muted edges) kept switchable
- * until a winner is baked in. State + persistence live in GraphExplorer. Collapsible so
- * it stays out of the way. Tokens + mono only.
+ * Obsidian-style view panel: layout selector + the navigation-mode toggle. The old
+ * opacity/fade sliders are gone — projects opacity and focus fade are fixed constants
+ * in ForceGraph. Camera nav (default on) keeps the web stable and moves the camera on
+ * selection; off restores the re-root reheat. State + persistence live in
+ * GraphExplorer. Collapsible so it stays out of the way. Tokens + mono only.
  */
 export function ViewControls({
   layout,
   autoDefault,
+  cameraNav,
   onLayoutChange,
+  onToggleCameraNav,
   onResetPositions,
   onReplayIntro,
 }: {
   layout: 'auto' | LayoutKind
   autoDefault: LayoutKind // what 'auto' resolves to for this content (always shown on the Auto chip)
+  cameraNav: boolean // on: selection glides the camera over a stable web; off: re-root reheat
   onLayoutChange: (next: 'auto' | LayoutKind) => void
+  onToggleCameraNav: (next: boolean) => void
   onResetPositions: () => void
   onReplayIntro: () => void
 }) {
@@ -61,6 +65,15 @@ export function ViewControls({
                 )
               })}
             </div>
+          </Section>
+
+          <Section label="navigation">
+            <Toggle
+              label="camera nav"
+              hint="off: re-root"
+              checked={cameraNav}
+              onChange={onToggleCameraNav}
+            />
           </Section>
 
           <button

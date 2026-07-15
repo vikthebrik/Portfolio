@@ -21,14 +21,43 @@ test.describe('the graph', () => {
     await expect(project).not.toHaveCSS('opacity', '0')
   })
 
-  test('clicking a hub re-roots the web and syncs the URL', async ({ page }) => {
+  test('clicking a hub frames it and syncs the URL', async ({ page }) => {
     await page.goto('/')
     await page.locator('[data-node][aria-label="design"]').click()
     await expect(page).toHaveURL(/\?focus=design/)
 
-    // Back/forward traverse the re-root history (History API, no remount).
+    // Back/forward traverse the selection history (History API, no remount).
     await page.goBack()
     await expect(page).not.toHaveURL(/focus=/)
+  })
+
+  test('camera nav (default): selection moves the camera, never the layout', async ({ page }) => {
+    await page.goto('/')
+    const scene = page.locator('svg[role="img"] > g').first()
+    const other = page.locator('[data-node][aria-label="design"]')
+    const nodeBefore = await other.getAttribute('transform')
+    const cameraBefore = await scene.getAttribute('transform')
+
+    await page.locator('[data-node][aria-label="tech"]').click()
+    await expect(page).toHaveURL(/\?focus=tech/)
+
+    // The camera glided to the tech cluster; the web itself did not rearrange.
+    await expect(scene).not.toHaveAttribute('transform', cameraBefore!)
+    await expect(other).toHaveAttribute('transform', nodeBefore!)
+  })
+
+  test('camera nav off: selection re-roots (reheats) the layout', async ({ page }) => {
+    await page.goto('/')
+    await page.getByRole('button', { name: /^view/ }).click()
+    await page.getByRole('button', { name: /camera nav/ }).click() // toggle off
+
+    const other = page.locator('[data-node][aria-label="design"]')
+    const nodeBefore = await other.getAttribute('transform')
+    await page.locator('[data-node][aria-label="tech"]').click()
+    await expect(page).toHaveURL(/\?focus=tech/)
+
+    // Re-root mode rings the web by distance from the selection — the web reflows.
+    await expect(other).not.toHaveAttribute('transform', nodeBefore!)
   })
 
   test('arrow keys walk the edges; Enter activates', async ({ page }) => {
