@@ -63,6 +63,9 @@ const REVEAL_STAGGER_MS = 110
 // beat after launch, then glide out slower than a normal re-root.
 const INTRO_ROOT_HOLD_MS = 400
 const INTRO_GLIDE_MS = 1400
+// Breathing beat between the intro ending (stage 3, past the last stagger) and the
+// resting camera fit easing out to frame the settled web.
+const INTRO_FIT_DELAY_MS = 600
 
 // Spoke geometry shared by every seeding pass (intro gather, replay, reveals):
 // hubs + about fan around the root in a fixed order.
@@ -209,6 +212,15 @@ export function ForceGraph({
   // any in-flight tween (a new re-root, a hand drag, unmount).
   const glideToken = useRef(0)
 
+  // One-shot resting fit. The web's resting diameter outgrew the 1:1 viewport (the
+  // label-sized collision radii spread it wide), so a launch that ends on the raw
+  // identity transform strands part of the web off one corner of the pane. Once the
+  // web first settles — the intro bloom quenching, or an intro-less mount cooling
+  // down — the camera eases out to fit the whole web (same framing as clearing to
+  // overview). Skipped once the visitor has selected a node or moved the camera.
+  const autoFitDone = useRef(false)
+  const userCam = useRef(false)
+
   // Glide the camera so the given graph point ends up framed at the viewport middle.
   // A rAF tween drives d3-zoom's own transform (so its internal state stays in sync and
   // the next gesture continues cleanly). Zoom is held constant unless a target `k` is
@@ -252,7 +264,16 @@ export function ForceGraph({
 
   // Glide the center node's *pin* from where it sits to the layout anchor. Without this
   // the fx/fy pin teleports the node to pane center on the next tick — the "snap".
-  const glidePin = (node: SimNode, to: { x: number; y: number }, ms = GLIDE_MS) => {
+  // `carryWeb` translates every free node by the pin's per-frame delta so the young web
+  // rides along instead of trailing behind: the intro glide runs while the sim is
+  // deliberately overdamped, and dragging the pin through that syrup used to stream the
+  // whole web off one side of the root (a comet tail the quench then froze in place).
+  const glidePin = (
+    node: SimNode,
+    to: { x: number; y: number },
+    ms = GLIDE_MS,
+    carryWeb = false,
+  ) => {
     const from = { x: node.x ?? to.x, y: node.y ?? to.y }
     if (Math.hypot(to.x - from.x, to.y - from.y) < 1) return
     const token = glideToken.current
@@ -261,8 +282,19 @@ export function ForceGraph({
       if (glideToken.current !== token) return // superseded
       const p = Math.min((now - start) / ms, 1)
       const e = easeInOutCubic(p)
-      node.fx = from.x + (to.x - from.x) * e
-      node.fy = from.y + (to.y - from.y) * e
+      const nx = from.x + (to.x - from.x) * e
+      const ny = from.y + (to.y - from.y) * e
+      if (carryWeb) {
+        const dx = nx - (node.fx ?? nx)
+        const dy = ny - (node.fy ?? ny)
+        for (const n of simNodesRef.current) {
+          if (n === node || n.fx != null) continue // hand pins stay put
+          n.x = (n.x ?? nx) + dx
+          n.y = (n.y ?? ny) + dy
+        }
+      }
+      node.fx = nx
+      node.fy = ny
       if (p < 1) requestAnimationFrame(step)
     }
     node.fx = from.x
@@ -336,6 +368,18 @@ export function ForceGraph({
     flyTo({ x: (minX + maxX) / 2, y: (minY + maxY) / 2 }, { k, instant })
   }
 
+  // The resting fit, guarded. Re-entrant: if the sim is still hot (a fast-forward
+  // left it reheating), it declines without consuming the one-shot — the sim's
+  // `end` event calls back in once the web is actually at rest.
+  const tryAutoFit = () => {
+    if (autoFitDone.current) return
+    const sim = simRef.current
+    if (!sim) return
+    if (sim.alpha() > 0.05 && !prefersReducedMotion()) return
+    autoFitDone.current = true
+    if (centerRef.current == null && !userCam.current) cameraGlide(null)
+  }
+
   const reapplySavedPins = (nodes: SimNode[]) => {
     const saved = loadPositions()
     for (const n of nodes) {
@@ -404,6 +448,8 @@ export function ForceGraph({
 
     const sim = forceSimulation(nodes)
     simRef.current = sim
+    autoFitDone.current = false
+    userCam.current = false
     applyLayout(sim, layoutRef.current, { w, h, edges, centerId: layoutCenterId() })
     reapplySavedPins(nodes) // hand-drags win over the layout's center pin
     applyVisibilityForces() // unrevealed projects stay forceless
@@ -423,8 +469,17 @@ export function ForceGraph({
       sim.tick(300)
       setTick((t) => t + 1)
       publish()
+      // Microtask: the zoom behavior installs in a later effect of this same
+      // commit, and the instant fit needs it to apply the transform.
+      queueMicrotask(tryAutoFit)
     } else {
       sim.on('tick', requestPaint)
+      // First genuine cool-down (intro-less mounts; or an intro whose bloom was
+      // still hot when the stage-3 fit checked in) → resting camera fit.
+      sim.on('end', () => {
+        if (introRef.current < 3) return // mid-intro settles are choreography, not rest
+        tryAutoFit()
+      })
       if (introRef.current < 3) {
         // Launch intro: gather the (invisible) web at the launch button and
         // freeze until stage 1 — the growth is the sim settling from this seed.
@@ -464,6 +519,7 @@ export function ForceGraph({
       ro.disconnect()
       sim.stop()
       sim.on('tick', null)
+      sim.on('end', null)
       // eslint-disable-next-line react-hooks/exhaustive-deps -- counter ref, not a DOM ref; bumping the live value is the point
       glideToken.current++ // cancel in-flight glides — their targets just unmounted
       if (bridge) bridge.snapshotRef.current = null // stale once the main graph unmounts
@@ -505,7 +561,7 @@ export function ForceGraph({
       // No cleanup: a fast-forward mid-hold must still deliver the root to its
       // anchor (glidePin's token check handles genuine supersession).
       window.setTimeout(
-        () => glidePin(root, anchor, INTRO_GLIDE_MS),
+        () => glidePin(root, anchor, INTRO_GLIDE_MS, true),
         INTRO_ROOT_HOLD_MS,
       )
     }
@@ -549,10 +605,17 @@ export function ForceGraph({
             byCat.set(n.category, list)
           }
         }
+        const rootNode = simNodesRef.current.find((n) => n.id === ROOT_ID)
         for (const [cat, list] of byCat) {
           const hub = simNodesRef.current.find((n) => n.id === cat)
           if (!hub) continue
-          const hubAngle = spokeAngle(cat)
+          // Fan outward along the hub's *actual* direction from the root — the
+          // canonical spoke angle goes stale once the skeleton has drifted, and
+          // fanning along it used to pile clusters onto one side of the web.
+          const dx = (hub.x ?? 0) - (rootNode?.x ?? 0)
+          const dy = (hub.y ?? 0) - (rootNode?.y ?? 0)
+          const hubAngle =
+            Math.hypot(dx, dy) > 1 ? Math.atan2(dy, dx) : spokeAngle(cat)
           const fanSpread = Math.PI / 1.5
           list.forEach((p, idx) => {
             const angle =
@@ -612,6 +675,25 @@ export function ForceGraph({
       return () => window.clearTimeout(t)
     }
     if (intro >= 3) sim.velocityDecay(0.4)
+  }, [intro])
+
+  // The intro's bloom settles under heavy friction and its alpha is spent by the
+  // time the show ends — a frozen glass, not an equilibrium. When the intro
+  // completes (friction back to 0.4), reheat so the web relaxes into its true
+  // balanced shape around the pinned root, then fit the camera: after a beat if
+  // the sim is already at rest, otherwise via its `end` event once it cools.
+  const prevIntroRef = useRef(intro)
+  useEffect(() => {
+    const was = prevIntroRef.current
+    prevIntroRef.current = intro
+    if (intro < 3 || was >= 3) return
+    const sim = simRef.current
+    if (sim && !prefersReducedMotion()) {
+      sim.alpha(Math.max(sim.alpha(), 0.35)).restart()
+    }
+    const t = window.setTimeout(tryAutoFit, INTRO_FIT_DELAY_MS)
+    return () => window.clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intro])
 
   // Re-run the layout when the user switches it — reheat, keep nodes + pins.
@@ -752,6 +834,9 @@ export function ForceGraph({
         return !t.closest('[data-node]')
       })
       .on('zoom', (event) => {
+        // A real gesture (wheel/drag), not a programmatic glide — the visitor has
+        // taken the camera; the one-shot resting fit must not yank it back.
+        if (event.sourceEvent) userCam.current = true
         const t = {
           x: event.transform.x,
           y: event.transform.y,
@@ -766,6 +851,7 @@ export function ForceGraph({
     sel.call(behavior)
 
     bridge?.setPanHandler((t) => {
+      userCam.current = true // minimap pans are user camera moves too
       select(svg).call(
         behavior.transform,
         zoomIdentity.translate(t.x, t.y).scale(t.k),

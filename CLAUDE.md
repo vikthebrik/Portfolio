@@ -188,7 +188,19 @@ carries `hidden`) — all of which only matters mid-intro.
   `useSyncExternalStore` store the global chrome subscribes to). Never a toll:
   reduced motion, mobile, `?focus=` deep links, and repeat visits (sessionStorage)
   skip straight to the settled web; a click mid-bloom fast-forwards.
-- **overview** — the full web, rooted on `root`. No node is hidden.
+- **overview** — the full web, rooted on `root`. No node is hidden. The resting web is
+  bigger than the 1:1 viewport (label-sized collision radii), so once it first settles —
+  intro bloom done, or an intro-less mount cooling down — a **one-shot resting fit**
+  (`tryAutoFit` in `ForceGraph.tsx`) eases the camera out to frame the whole web, same
+  framing as clearing to overview (2026-07: the launch used to end with the web hanging
+  off one corner of the pane). Skipped once the visitor has selected a node or moved the
+  camera themselves. Three companion guards keep the *layout itself* balanced around the
+  root after a launch (2026-07 — the overdamped intro used to quench a lopsided web):
+  the intro root glide **carries the web rigidly** with the pin (`glidePin`'s `carryWeb`
+  — no comet tail), the bloom fans each cluster along the hub's **actual** root→hub
+  direction (not the stale canonical spoke angle), and intro completion **reheats**
+  (α ≥ 0.35 at normal friction) so the frozen bloom relaxes to true equilibrium before
+  the fit.
 - **select / frame** — clicking **any** node (a category hub *or* a project) makes it
   the current center. **Camera nav (default, 2026-07)**: the layout stays the canonical
   root-rooted web — the simulation is untouched (no reheat, no pin moves) — while the
